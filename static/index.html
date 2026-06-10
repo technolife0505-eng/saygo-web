@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SayGo Web MVP v4</title>
+  <title>SayGo Web MVP v5</title>
   <style>
     :root {
       --bg: #f4f6fb; --card: #ffffff; --primary: #111827; --primary2: #2563eb;
@@ -55,7 +55,7 @@
     .original { margin-top:7px; color:#4b5563; font-size:12px; border-top:1px solid rgba(0,0,0,.08); padding-top:7px; }
     .status-text { color:#2563eb; font-weight:700; }
     .composer { padding:14px; display:flex; gap:10px; border-top:1px solid var(--line); background:#fff; }
-    .composer input { flex:1; } .composer button { width:120px; margin-top:0; }
+    .composer input { flex:1; } .composer button { width:120px; margin-top:0; } .composer button.mic { width:52px; padding:12px 0; } .composer button.recording { background:#dc2626; animation:pulse 1s infinite; } @keyframes pulse{0%{opacity:1}50%{opacity:.7}100%{opacity:1}}
 
     .qr-card { margin-top:10px; padding:12px; border:1px dashed var(--line); border-radius:14px; background:#f9fafb; text-align:center; }
     .qr-card img { width:180px; height:180px; background:#fff; padding:8px; border-radius:14px; border:1px solid var(--line); }
@@ -72,7 +72,7 @@
     <aside class="panel">
       <div class="side-header">
         <div class="brand"><div class="logo">S</div><div>SayGo</div></div>
-        <div class="hint">v4.1: QR kamera linki, chatlar, kontaktlar, online/typing.</div>
+        <div class="hint">v5: QR, chatlar, kontaktlar, online/typing va voice message tarjima.</div>
       </div>
 
       <div class="body">
@@ -127,6 +127,7 @@
       <div id="messages" class="messages"><div class="empty">SayGo’da har kim o‘z tilida yozadi, suhbatdosh esa o‘z tilida ko‘radi.</div></div>
       <div class="composer">
         <input id="messageInput" placeholder="Xabar yozing..." oninput="handleTyping()" onkeydown="if(event.key==='Enter') sendMessage()" />
+        <button id="micBtn" class="mic secondary" onclick="toggleRecording()" title="Voice message">🎙️</button>
         <button onclick="sendMessage()">Yuborish</button>
       </div>
     </main>
@@ -137,6 +138,7 @@ const API = window.location.origin;
 const WS = (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
 let socket = null, me = null, myLang = null, friend = null, friendProfile = null, chatId = null, activeTab = 'chats';
 let typingTimer = null, qrStream = null, qrScanTimer = null;
+let mediaRecorder = null, recordedChunks = [], isRecording = false;
 const onlineMap = new Map();
 
 function normalizeNick(nick){ nick=(nick||'').trim().toLowerCase().replaceAll(' ',''); if(!nick.startsWith('@')) nick='@'+nick; return nick; }
@@ -306,6 +308,52 @@ function sendMessage(){
   input.value=''; input.focus();
 }
 
+async function toggleRecording(){
+  if(isRecording){ stopRecording(); return; }
+  if(!me) return alert('Avval ro‘yxatdan o‘ting');
+  if(!chatId||!friend) return alert('Avval chat oching.');
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return alert('Brauzer mikrofonni qo‘llamaydi.');
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => { if(e.data && e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t=>t.stop());
+      await sendVoiceBlob(new Blob(recordedChunks, {type: mediaRecorder.mimeType || 'audio/webm'}));
+    };
+    mediaRecorder.start();
+    isRecording = true;
+    const btn=document.getElementById('micBtn'); btn.classList.add('recording'); btn.textContent='⏹️';
+  }catch(e){ alert('Mikrofon ochilmadi: '+e.message); }
+}
+function stopRecording(){
+  if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  isRecording = false;
+  const btn=document.getElementById('micBtn'); btn.classList.remove('recording'); btn.textContent='🎙️';
+}
+async function sendVoiceBlob(blob){
+  if(!blob || blob.size === 0) return;
+  const clientMessageId=`voice_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  addMessage({type:'message',message_kind:'voice',id:clientMessageId,client_message_id:clientMessageId,chat_id:chatId,sender:me,receiver:friend,original_text:'🎙️ Voice message yuborildi',translated_text:'Ovoz matnga aylantirilmoqda...',source_lang:myLang||'?',target_lang:(friendProfile&&friendProfile.language)||'?',status:'translating',created_at:new Date().toISOString()});
+  const fd = new FormData();
+  fd.append('audio', blob, 'voice.webm');
+  fd.append('chat_id', chatId);
+  fd.append('sender', me);
+  fd.append('receiver', friend);
+  fd.append('client_message_id', clientMessageId);
+  try{
+    const res = await fetch(API + '/api/voice-message', {method:'POST', body: fd});
+    if(!res.ok){ const err=await res.json().catch(()=>({detail:res.statusText})); throw new Error(err.detail||'Voice xatolik'); }
+    // Server WebSocket orqali xabarni ham yuboradi. Agar WebSocket kechiksa, shu yerda ham yangilab qo'yamiz.
+    const msg = await res.json();
+    addMessage(msg);
+    await loadChats();
+  }catch(e){
+    addMessage({type:'message',message_kind:'voice',id:clientMessageId,client_message_id:clientMessageId,chat_id:chatId,sender:me,receiver:friend,original_text:'🎙️ Voice message',translated_text:'Voice yuborishda xatolik: '+e.message,source_lang:myLang||'?',target_lang:(friendProfile&&friendProfile.language)||'?',status:'error',created_at:new Date().toISOString()});
+  }
+}
+
 function sendTyping(isTyping){
   if(!socket||socket.readyState!==WebSocket.OPEN||!chatId||!friend) return;
   socket.send(JSON.stringify({type:'typing',chat_id:chatId,sender:me,receiver:friend,is_typing:isTyping}));
@@ -324,9 +372,11 @@ function addMessage(msg){
   const messages=document.getElementById('messages'); const empty=messages.querySelector('.empty'); if(empty) empty.remove();
   const isMe=msg.sender===me; const key=msg.client_message_id||msg.id; let wrap=key?messages.querySelector(`[data-message-key="${cssEscape(key)}"]`):null;
   if(!wrap){ wrap=document.createElement('div'); wrap.className='msg-wrap '+(isMe?'me':''); if(key) wrap.dataset.messageKey=key; messages.appendChild(wrap); } else { wrap.className='msg-wrap '+(isMe?'me':''); }
-  const translatedText=msg.translated_text||'Tarjima mavjud emas'; const shownText=isMe?msg.original_text:translatedText;
+  const translatedText=msg.translated_text||'Tarjima mavjud emas';
+  const kindLabel = msg.message_kind === 'voice' ? '🎙️ ' : '';
+  const shownText=kindLabel + (isMe?msg.original_text:translatedText);
   const originalLine=isMe?`Tarjima: ${translatedText}`:`Original: ${msg.original_text}`;
-  const timeLabel=formatTime(msg.created_at); const statusLabel=msg.status==='translating'?' · ⏳ tarjima qilinmoqda':(isMe?' · ✓✓ tarjima qilindi':' · 🌐 tarjima'); const bubbleClass=msg.status==='translating'?'bubble pending':'bubble';
+  const timeLabel=formatTime(msg.created_at); const statusLabel=msg.status==='translating'?' · ⏳ ishlanmoqda':(isMe?' · ✓✓ tayyor':' · 🌐 tarjima'); const bubbleClass=msg.status==='translating'?'bubble pending':'bubble';
   wrap.innerHTML=`<div class="${bubbleClass}"><div class="text">${escapeHtml(shownText)}</div><div class="original ${msg.status==='translating'?'status-text':''}">${escapeHtml(originalLine)}</div><div class="meta">${escapeHtml(timeLabel)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}${escapeHtml(statusLabel)}</div></div>`;
   messages.scrollTop=messages.scrollHeight;
 }
