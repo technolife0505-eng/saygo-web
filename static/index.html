@@ -132,7 +132,9 @@
     .msg-wrap.me .bubble { background: var(--me); }
     .bubble .text { font-size: 15px; line-height: 1.38; white-space: pre-wrap; }
     .bubble .meta { font-size: 11px; color: var(--muted); margin-top: 7px; }
+    .bubble.pending { opacity: .82; }
     .original { margin-top: 7px; color: #4b5563; font-size: 12px; border-top: 1px solid rgba(0,0,0,.08); padding-top: 7px; }
+    .status-text { color: #2563eb; font-weight: 600; }
     .composer {
       padding: 14px;
       display: flex;
@@ -329,8 +331,33 @@
       if (!socket || socket.readyState !== WebSocket.OPEN) return alert("WebSocket ulanmagan. Qayta kiring.");
       if (!chatId || !friend) return alert("Avval chat oching.");
 
-      socket.send(JSON.stringify({ chat_id: chatId, sender: me, receiver: friend, text }));
+      const clientMessageId = `local_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+      // Optimistic UI: xabar server/OpenAI javobini kutmasdan darhol ekranga chiqadi
+      addMessage({
+        type: "message",
+        id: clientMessageId,
+        client_message_id: clientMessageId,
+        chat_id: chatId,
+        sender: me,
+        receiver: friend,
+        original_text: text,
+        translated_text: "Tarjima qilinmoqda...",
+        source_lang: myLang || "?",
+        target_lang: (friendProfile && friendProfile.language) || "?",
+        status: "translating",
+        created_at: new Date().toISOString()
+      });
+
+      socket.send(JSON.stringify({
+        chat_id: chatId,
+        sender: me,
+        receiver: friend,
+        text,
+        client_message_id: clientMessageId
+      }));
       input.value = "";
+      input.focus();
     }
 
     function addMessage(msg) {
@@ -340,21 +367,37 @@
       if (empty) empty.remove();
 
       const isMe = msg.sender === me;
-      const wrap = document.createElement("div");
-      wrap.className = "msg-wrap " + (isMe ? "me" : "");
+      const key = msg.client_message_id || msg.id;
+      let wrap = key ? messages.querySelector(`[data-message-key="${cssEscape(key)}"]`) : null;
 
-      const shownText = isMe ? msg.original_text : msg.translated_text;
-      const originalLine = isMe ? `Tarjima: ${msg.translated_text}` : `Original: ${msg.original_text}`;
+      if (!wrap) {
+        wrap = document.createElement("div");
+        wrap.className = "msg-wrap " + (isMe ? "me" : "");
+        if (key) wrap.dataset.messageKey = key;
+        messages.appendChild(wrap);
+      } else {
+        wrap.className = "msg-wrap " + (isMe ? "me" : "");
+      }
+
+      const translatedText = msg.translated_text || "Tarjima mavjud emas";
+      const shownText = isMe ? msg.original_text : translatedText;
+      const originalLine = isMe ? `Tarjima: ${translatedText}` : `Original: ${msg.original_text}`;
+      const statusLabel = msg.status === "translating" ? " · tarjima qilinmoqda" : " · tarjima qilindi";
+      const bubbleClass = msg.status === "translating" ? "bubble pending" : "bubble";
 
       wrap.innerHTML = `
-        <div class="bubble">
+        <div class="${bubbleClass}">
           <div class="text">${escapeHtml(shownText)}</div>
-          <div class="original">${escapeHtml(originalLine)}</div>
-          <div class="meta">${escapeHtml(msg.sender)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}</div>
+          <div class="original ${msg.status === "translating" ? "status-text" : ""}">${escapeHtml(originalLine)}</div>
+          <div class="meta">${escapeHtml(msg.sender)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}${escapeHtml(statusLabel)}</div>
         </div>
       `;
-      messages.appendChild(wrap);
       messages.scrollTop = messages.scrollHeight;
+    }
+
+    function cssEscape(value) {
+      if (window.CSS && CSS.escape) return CSS.escape(value);
+      return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
     }
 
     function escapeHtml(str) {
