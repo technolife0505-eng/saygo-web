@@ -19,11 +19,13 @@ load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-nano").strip() or "gpt-5-nano"
+OPENAI_TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts").strip() or "gpt-4o-mini-tts"
+OPENAI_TTS_VOICE = os.getenv("OPENAI_TTS_VOICE", "alloy").strip() or "alloy"
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./saygo.db").strip() or "sqlite:///./saygo.db"
 
 client: Optional[AsyncOpenAI] = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-app = FastAPI(title="SayGo Web MVP", version="0.5.2")
+app = FastAPI(title="SayGo Web MVP", version="0.6.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -134,6 +136,7 @@ def mapping_get(m, key: str, default=None):
 def message_to_dict(row) -> dict:
     m = row._mapping if hasattr(row, "_mapping") else row
     audio_id = mapping_get(m, "audio_id")
+    translated_audio_id = mapping_get(m, "translated_audio_id")
     message_kind = mapping_get(m, "message_kind", "text") or "text"
     payload = {
         "type": "message",
@@ -150,10 +153,13 @@ def message_to_dict(row) -> dict:
         "status": m["status"],
         "message_kind": message_kind,
         "audio_id": audio_id,
+        "translated_audio_id": translated_audio_id,
         "duration_ms": mapping_get(m, "duration_ms"),
     }
     if audio_id:
         payload["audio_url"] = f"/api/audio/{audio_id}"
+    if translated_audio_id:
+        payload["translated_audio_url"] = f"/api/audio/{translated_audio_id}"
     return payload
 
 
@@ -237,6 +243,7 @@ def init_db() -> None:
         for ddl in [
             "ALTER TABLE messages ADD COLUMN message_kind VARCHAR(30) NOT NULL DEFAULT 'text'",
             "ALTER TABLE messages ADD COLUMN audio_id VARCHAR(80)",
+            "ALTER TABLE messages ADD COLUMN translated_audio_id VARCHAR(80)",
             "ALTER TABLE messages ADD COLUMN duration_ms INTEGER",
         ]:
             try:
@@ -321,6 +328,37 @@ async def transcribe_audio_bytes(audio_bytes: bytes, filename: str, content_type
     return text_value.strip()
 
 
+
+
+async def synthesize_speech_bytes(text_value: str, language: str) -> bytes:
+    text_value = (text_value or "").strip()
+    if not text_value:
+        return b""
+    if client is None:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY sozlanmagan")
+
+    # SayGo v6: tarjima qilingan matnni audio voice ga aylantirish.
+    # response_format=mp3 brauzerda eng barqaror ishlaydi.
+    try:
+        response = await client.audio.speech.create(
+            model=OPENAI_TTS_MODEL,
+            voice=OPENAI_TTS_VOICE,
+            input=text_value,
+            response_format="mp3",
+        )
+        if hasattr(response, "content"):
+            return response.content
+        if hasattr(response, "read"):
+            maybe = response.read()
+            if hasattr(maybe, "__await__"):
+                maybe = await maybe
+            return maybe
+        return bytes(response)
+    except Exception as exc:
+        print(f"TTS error: lang={language}, chars={len(text_value)}, error={exc!r}")
+        return b""
+
+
 async def create_and_deliver_message(
     cid: str,
     sender: str,
@@ -330,6 +368,7 @@ async def create_and_deliver_message(
     message_kind: str = "text",
     audio_id: Optional[str] = None,
     duration_ms: Optional[int] = None,
+    translated_audio_id: Optional[str] = None,
 ) -> dict:
     sender_user = public_user(sender)
     receiver_user = public_user(receiver)
@@ -351,6 +390,20 @@ async def create_and_deliver_message(
         translated = f"[Translation error] {text_value}"
         print("Translation error:", repr(exc))
 
+    # v6: voice xabarlarda tarjima qilingan matnni voice qilib saqlaymiz.
+    if message_kind == "voice" and not translated_audio_id and translated and not translated.startswith("[Translation error]"):
+        tts_bytes = await synthesize_speech_bytes(translated, receiver_lang)
+        if tts_bytes:
+            translated_audio_id = save_audio_file(
+                chat_id=cid,
+                sender="@saygo",
+                receiver=receiver,
+                audio_bytes=tts_bytes,
+                filename="translated.mp3",
+                content_type="audio/mpeg",
+                duration_ms=None,
+            )
+
     with engine.begin() as conn:
         a, b = sorted([sender, receiver])
         conn.execute(text("""
@@ -362,11 +415,11 @@ async def create_and_deliver_message(
             INSERT INTO messages (
                 chat_id, sender, receiver, original_text, translated_text,
                 source_lang, target_lang, client_message_id, status, created_at,
-                message_kind, audio_id, duration_ms
+                message_kind, audio_id, translated_audio_id, duration_ms
             ) VALUES (
                 :chat_id, :sender, :receiver, :original_text, :translated_text,
                 :source_lang, :target_lang, :client_message_id, :status, :created_at,
-                :message_kind, :audio_id, :duration_ms
+                :message_kind, :audio_id, :translated_audio_id, :duration_ms
             ) RETURNING *
         """), {
             "chat_id": cid,
@@ -381,6 +434,7 @@ async def create_and_deliver_message(
             "created_at": now_iso(),
             "message_kind": message_kind,
             "audio_id": audio_id,
+            "translated_audio_id": translated_audio_id,
             "duration_ms": duration_ms,
         })
         row = result.fetchone()
@@ -409,11 +463,13 @@ async def health():
     return {
         "status": "ok",
         "app": "SayGo Web MVP",
-        "version": "0.5.2-voice-professional",
+        "version": "0.6.0-voice-to-voice",
         "database_configured": bool(os.getenv("DATABASE_URL", "").strip()),
         "database_dialect": engine.dialect.name,
         "openai_key_configured": bool(OPENAI_API_KEY),
         "model": OPENAI_MODEL,
+        "tts_model": OPENAI_TTS_MODEL,
+        "tts_voice": OPENAI_TTS_VOICE,
     }
 
 
