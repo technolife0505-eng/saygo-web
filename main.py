@@ -21,7 +21,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./saygo.db").strip() or "sql
 
 client: Optional[AsyncOpenAI] = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-app = FastAPI(title="SayGo Web MVP", version="0.2.0")
+app = FastAPI(title="SayGo Web MVP", version="0.3.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,6 +42,7 @@ LANG_NAMES = {
 }
 
 connections: dict[str, WebSocket] = {}
+online_users: set[str] = set()
 
 
 def make_engine() -> Engine:
@@ -247,7 +248,7 @@ async def health():
     return {
         "status": "ok",
         "app": "SayGo Web MVP",
-        "version": "0.2.0-postgres",
+        "version": "0.3.1-chat-polish",
         "database_configured": bool(os.getenv("DATABASE_URL", "").strip()),
         "database_dialect": engine.dialect.name,
         "openai_key_configured": bool(OPENAI_API_KEY),
@@ -437,16 +438,51 @@ async def user_chats(nickname: str):
     return result
 
 
+async def send_to_user(nickname: str, payload: dict) -> None:
+    ws = connections.get(nickname)
+    if ws:
+        try:
+            await ws.send_text(json.dumps(payload, ensure_ascii=False))
+        except Exception:
+            pass
+
+
+async def notify_presence(nickname: str, is_online: bool) -> None:
+    payload = {"type": "presence", "nickname": nickname, "online": is_online}
+    for user, ws in list(connections.items()):
+        if user != nickname:
+            try:
+                await ws.send_text(json.dumps(payload, ensure_ascii=False))
+            except Exception:
+                pass
+
+
 @app.websocket("/ws/{nickname}")
 async def websocket_endpoint(websocket: WebSocket, nickname: str):
     nickname = normalize_nickname(nickname)
     await websocket.accept()
     connections[nickname] = websocket
+    online_users.add(nickname)
+    await websocket.send_text(json.dumps({"type": "presence", "nickname": nickname, "online": True}, ensure_ascii=False))
+    await notify_presence(nickname, True)
 
     try:
         while True:
             raw = await websocket.receive_text()
             data = json.loads(raw)
+
+            event_type = data.get("type", "message")
+            if event_type == "typing":
+                sender = normalize_nickname(data.get("sender", ""))
+                receiver = normalize_nickname(data.get("receiver", ""))
+                await send_to_user(receiver, {
+                    "type": "typing",
+                    "chat_id": data.get("chat_id"),
+                    "sender": sender,
+                    "receiver": receiver,
+                    "is_typing": bool(data.get("is_typing", False)),
+                })
+                continue
 
             cid = data.get("chat_id")
             sender = normalize_nickname(data.get("sender", ""))
@@ -506,12 +542,13 @@ async def websocket_endpoint(websocket: WebSocket, nickname: str):
 
             message = message_to_dict(row)
 
-            if receiver in connections:
-                await connections[receiver].send_text(json.dumps(message, ensure_ascii=False))
-
-            if sender in connections:
-                await connections[sender].send_text(json.dumps(message, ensure_ascii=False))
+            await send_to_user(receiver, message)
+            await send_to_user(sender, message)
 
     except WebSocketDisconnect:
+        pass
+    finally:
         if connections.get(nickname) is websocket:
             connections.pop(nickname, None)
+        online_users.discard(nickname)
+        await notify_presence(nickname, False)

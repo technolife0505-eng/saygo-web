@@ -1,6 +1,17 @@
-# SayGo Web MVP v2
+# SayGo Web MVP v3.1
 
 Tarjima chat MVP: FastAPI + WebSocket + OpenAI + PostgreSQL.
+
+## v3.1 yangiliklari
+
+- Chatlar ro'yxati va kontaktlar saqlanadi
+- Nickname orqali qidirish
+- Xabarlar PostgreSQL bazaga saqlanadi
+- Xabar yuborilganda darhol ekranga chiqadi
+- Tarjima kelgach xabar avtomatik yangilanadi
+- Online / offline holati
+- “yozmoqda...” typing indicator
+- Xabar vaqti va tarjima statuslari
 
 ## Render Web Service
 
@@ -25,11 +36,3 @@ DATABASE_URL=postgresql://...
 ```
 
 Agar `DATABASE_URL` qo'yilmasa, lokal test uchun `sqlite:///./saygo.db` ishlaydi.
-
-## v2 yangiliklari
-
-- Users PostgreSQL bazaga saqlanadi
-- Contacts PostgreSQL bazaga saqlanadi
-- Chats PostgreSQL bazaga saqlanadi
-- Messages PostgreSQL bazaga saqlanadi
-- Render restart bo'lsa xabarlar yo'qolmaydi
