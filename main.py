@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from io import BytesIO
 from datetime import datetime, timezone
 from typing import Optional
@@ -7,7 +8,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
@@ -22,7 +23,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./saygo.db").strip() or "sql
 
 client: Optional[AsyncOpenAI] = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-app = FastAPI(title="SayGo Web MVP", version="0.5.0")
+app = FastAPI(title="SayGo Web MVP", version="0.5.2")
 
 app.add_middleware(
     CORSMiddleware,
@@ -120,9 +121,21 @@ def row_to_public_user(row) -> Optional[dict]:
     }
 
 
+def mapping_get(m, key: str, default=None):
+    try:
+        return m.get(key, default)
+    except Exception:
+        try:
+            return m[key]
+        except Exception:
+            return default
+
+
 def message_to_dict(row) -> dict:
     m = row._mapping if hasattr(row, "_mapping") else row
-    return {
+    audio_id = mapping_get(m, "audio_id")
+    message_kind = mapping_get(m, "message_kind", "text") or "text"
+    payload = {
         "type": "message",
         "id": str(m["id"]),
         "chat_id": m["chat_id"],
@@ -133,9 +146,15 @@ def message_to_dict(row) -> dict:
         "source_lang": m["source_lang"],
         "target_lang": m["target_lang"],
         "created_at": str(m["created_at"]),
-        "client_message_id": m.get("client_message_id") if hasattr(m, "get") else m["client_message_id"],
+        "client_message_id": mapping_get(m, "client_message_id"),
         "status": m["status"],
+        "message_kind": message_kind,
+        "audio_id": audio_id,
+        "duration_ms": mapping_get(m, "duration_ms"),
     }
+    if audio_id:
+        payload["audio_url"] = f"/api/audio/{audio_id}"
+    return payload
 
 
 def init_db() -> None:
@@ -196,6 +215,34 @@ def init_db() -> None:
                     created_at VARCHAR(64) NOT NULL
                 )
             """))
+
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS audio_files (
+                audio_id VARCHAR(80) PRIMARY KEY,
+                chat_id VARCHAR(160) NOT NULL,
+                sender VARCHAR(64) NOT NULL,
+                receiver VARCHAR(64) NOT NULL,
+                filename VARCHAR(160) NOT NULL,
+                content_type VARCHAR(80) NOT NULL,
+                audio_bytes BYTEA NOT NULL,
+                duration_ms INTEGER,
+                created_at VARCHAR(64) NOT NULL
+            )
+        """))
+
+        # v5.2 migration: existing deployments may already have messages table.
+        # Add voice-related columns safely. SQLite may not support IF NOT EXISTS for ADD COLUMN,
+        # so duplicate-column errors are ignored.
+        for ddl in [
+            "ALTER TABLE messages ADD COLUMN message_kind VARCHAR(30) NOT NULL DEFAULT 'text'",
+            "ALTER TABLE messages ADD COLUMN audio_id VARCHAR(80)",
+            "ALTER TABLE messages ADD COLUMN duration_ms INTEGER",
+        ]:
+            try:
+                conn.execute(text(ddl))
+            except Exception:
+                pass
 
 
 @app.on_event("startup")
@@ -281,6 +328,8 @@ async def create_and_deliver_message(
     text_value: str,
     client_message_id: Optional[str] = None,
     message_kind: str = "text",
+    audio_id: Optional[str] = None,
+    duration_ms: Optional[int] = None,
 ) -> dict:
     sender_user = public_user(sender)
     receiver_user = public_user(receiver)
@@ -312,10 +361,12 @@ async def create_and_deliver_message(
         result = conn.execute(text("""
             INSERT INTO messages (
                 chat_id, sender, receiver, original_text, translated_text,
-                source_lang, target_lang, client_message_id, status, created_at
+                source_lang, target_lang, client_message_id, status, created_at,
+                message_kind, audio_id, duration_ms
             ) VALUES (
                 :chat_id, :sender, :receiver, :original_text, :translated_text,
-                :source_lang, :target_lang, :client_message_id, :status, :created_at
+                :source_lang, :target_lang, :client_message_id, :status, :created_at,
+                :message_kind, :audio_id, :duration_ms
             ) RETURNING *
         """), {
             "chat_id": cid,
@@ -328,6 +379,9 @@ async def create_and_deliver_message(
             "client_message_id": client_message_id,
             "status": "translated",
             "created_at": now_iso(),
+            "message_kind": message_kind,
+            "audio_id": audio_id,
+            "duration_ms": duration_ms,
         })
         row = result.fetchone()
 
@@ -355,7 +409,7 @@ async def health():
     return {
         "status": "ok",
         "app": "SayGo Web MVP",
-        "version": "0.5.0-voice-message",
+        "version": "0.5.2-voice-professional",
         "database_configured": bool(os.getenv("DATABASE_URL", "").strip()),
         "database_dialect": engine.dialect.name,
         "openai_key_configured": bool(OPENAI_API_KEY),
@@ -591,6 +645,56 @@ async def notify_presence(nickname: str, is_online: bool) -> None:
                 pass
 
 
+def save_audio_file(
+    chat_id: str,
+    sender: str,
+    receiver: str,
+    audio_bytes: bytes,
+    filename: str,
+    content_type: str,
+    duration_ms: Optional[int],
+) -> str:
+    audio_id = uuid.uuid4().hex
+    safe_filename = filename or "voice.webm"
+    safe_type = content_type or "audio/webm"
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO audio_files (
+                audio_id, chat_id, sender, receiver, filename, content_type,
+                audio_bytes, duration_ms, created_at
+            ) VALUES (
+                :audio_id, :chat_id, :sender, :receiver, :filename, :content_type,
+                :audio_bytes, :duration_ms, :created_at
+            )
+        """), {
+            "audio_id": audio_id,
+            "chat_id": chat_id,
+            "sender": sender,
+            "receiver": receiver,
+            "filename": safe_filename,
+            "content_type": safe_type,
+            "audio_bytes": audio_bytes,
+            "duration_ms": duration_ms,
+            "created_at": now_iso(),
+        })
+    return audio_id
+
+
+@app.get("/api/audio/{audio_id}")
+async def get_audio(audio_id: str):
+    with engine.begin() as conn:
+        row = conn.execute(text("SELECT * FROM audio_files WHERE audio_id = :audio_id"), {"audio_id": audio_id}).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Audio topilmadi")
+    m = row._mapping
+    audio_bytes = m["audio_bytes"]
+    if isinstance(audio_bytes, memoryview):
+        audio_bytes = audio_bytes.tobytes()
+    return StreamingResponse(BytesIO(audio_bytes), media_type=m["content_type"], headers={
+        "Content-Disposition": f"inline; filename={m['filename']}"
+    })
+
+
 @app.post("/api/voice-message")
 async def voice_message(
     audio: UploadFile = File(...),
@@ -598,15 +702,35 @@ async def voice_message(
     sender: str = Form(...),
     receiver: str = Form(...),
     client_message_id: str = Form(default=""),
+    duration_ms: int = Form(default=0),
 ):
     sender = normalize_nickname(sender)
     receiver = normalize_nickname(receiver)
     audio_bytes = await audio.read()
+    if not audio_bytes or len(audio_bytes) < 1000:
+        raise HTTPException(status_code=400, detail="Audio juda qisqa yoki bo'sh. Qayta yozing.")
+
+    audio_id = save_audio_file(
+        chat_id=chat_id,
+        sender=sender,
+        receiver=receiver,
+        audio_bytes=audio_bytes,
+        filename=audio.filename or "voice.webm",
+        content_type=audio.content_type or "audio/webm",
+        duration_ms=duration_ms or None,
+    )
+
     transcript = await transcribe_audio_bytes(audio_bytes, audio.filename or "voice.webm", audio.content_type or "audio/webm")
     if not transcript:
         raise HTTPException(status_code=400, detail="Ovozdan matn aniqlanmadi")
-    message = await create_and_deliver_message(chat_id, sender, receiver, transcript, client_message_id or None, "voice")
+    message = await create_and_deliver_message(
+        chat_id, sender, receiver, transcript, client_message_id or None,
+        "voice", audio_id=audio_id, duration_ms=duration_ms or None
+    )
     message["transcript"] = transcript
+    message["audio_id"] = audio_id
+    message["audio_url"] = f"/api/audio/{audio_id}"
+    message["duration_ms"] = duration_ms or None
     return message
 
 
