@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,7 +21,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./saygo.db").strip() or "sql
 
 client: Optional[AsyncOpenAI] = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-app = FastAPI(title="SayGo Web MVP", version="0.4.1")
+app = FastAPI(title="SayGo Web MVP", version="0.5.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -242,6 +242,85 @@ async def translate_text(text_value: str, source_lang: str, target_lang: str) ->
     return response.output_text.strip()
 
 
+async def transcribe_audio_bytes(audio_bytes: bytes, filename: str, content_type: str) -> str:
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Audio fayl bo'sh")
+    if client is None:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY sozlanmagan")
+
+    transcribe_model = os.getenv("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe").strip() or "gpt-4o-mini-transcribe"
+    result = await client.audio.transcriptions.create(
+        model=transcribe_model,
+        file=(filename or "voice.webm", audio_bytes, content_type or "audio/webm"),
+    )
+    text_value = getattr(result, "text", "") or ""
+    return text_value.strip()
+
+
+async def create_and_deliver_message(
+    cid: str,
+    sender: str,
+    receiver: str,
+    text_value: str,
+    client_message_id: Optional[str] = None,
+    message_kind: str = "text",
+) -> dict:
+    sender_user = public_user(sender)
+    receiver_user = public_user(receiver)
+    if not sender_user or not receiver_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not text_value.strip():
+        raise HTTPException(status_code=400, detail="Xabar matni bo'sh")
+
+    expected_cid = chat_id_for(sender, receiver)
+    if cid != expected_cid:
+        cid = expected_cid
+
+    sender_lang = sender_user["language"]
+    receiver_lang = receiver_user["language"]
+
+    try:
+        translated = await translate_text(text_value, sender_lang, receiver_lang)
+    except Exception as exc:
+        translated = f"[Translation error] {text_value}"
+        print("Translation error:", repr(exc))
+
+    with engine.begin() as conn:
+        a, b = sorted([sender, receiver])
+        conn.execute(text("""
+            INSERT INTO chats (chat_id, user_a, user_b, created_at)
+            VALUES (:chat_id, :user_a, :user_b, :created_at)
+            ON CONFLICT (chat_id) DO NOTHING
+        """), {"chat_id": cid, "user_a": a, "user_b": b, "created_at": now_iso()})
+        result = conn.execute(text("""
+            INSERT INTO messages (
+                chat_id, sender, receiver, original_text, translated_text,
+                source_lang, target_lang, client_message_id, status, created_at
+            ) VALUES (
+                :chat_id, :sender, :receiver, :original_text, :translated_text,
+                :source_lang, :target_lang, :client_message_id, :status, :created_at
+            ) RETURNING *
+        """), {
+            "chat_id": cid,
+            "sender": sender,
+            "receiver": receiver,
+            "original_text": text_value,
+            "translated_text": translated,
+            "source_lang": sender_lang,
+            "target_lang": receiver_lang,
+            "client_message_id": client_message_id,
+            "status": "translated",
+            "created_at": now_iso(),
+        })
+        row = result.fetchone()
+
+    message = message_to_dict(row)
+    message["message_kind"] = message_kind
+    await send_to_user(receiver, message)
+    await send_to_user(sender, message)
+    return message
+
+
 @app.get("/u/{nickname:path}")
 async def user_deep_link(nickname: str):
     # Camera QR scanners open this HTTPS link. Frontend reads /u/@nickname
@@ -259,7 +338,7 @@ async def health():
     return {
         "status": "ok",
         "app": "SayGo Web MVP",
-        "version": "0.4.1-qr-camera-link",
+        "version": "0.5.0-voice-message",
         "database_configured": bool(os.getenv("DATABASE_URL", "").strip()),
         "database_dialect": engine.dialect.name,
         "openai_key_configured": bool(OPENAI_API_KEY),
@@ -495,6 +574,25 @@ async def notify_presence(nickname: str, is_online: bool) -> None:
                 pass
 
 
+@app.post("/api/voice-message")
+async def voice_message(
+    audio: UploadFile = File(...),
+    chat_id: str = Form(...),
+    sender: str = Form(...),
+    receiver: str = Form(...),
+    client_message_id: str = Form(default=""),
+):
+    sender = normalize_nickname(sender)
+    receiver = normalize_nickname(receiver)
+    audio_bytes = await audio.read()
+    transcript = await transcribe_audio_bytes(audio_bytes, audio.filename or "voice.webm", audio.content_type or "audio/webm")
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Ovozdan matn aniqlanmadi")
+    message = await create_and_deliver_message(chat_id, sender, receiver, transcript, client_message_id or None, "voice")
+    message["transcript"] = transcript
+    return message
+
+
 @app.websocket("/ws/{nickname}")
 async def websocket_endpoint(websocket: WebSocket, nickname: str):
     nickname = normalize_nickname(nickname)
@@ -536,52 +634,7 @@ async def websocket_endpoint(websocket: WebSocket, nickname: str):
             if not text_value:
                 continue
 
-            expected_cid = chat_id_for(sender, receiver)
-            if cid != expected_cid:
-                cid = expected_cid
-
-            sender_lang = sender_user["language"]
-            receiver_lang = receiver_user["language"]
-
-            try:
-                translated = await translate_text(text_value, sender_lang, receiver_lang)
-            except Exception as exc:
-                translated = f"[Translation error] {text_value}"
-                print("Translation error:", repr(exc))
-
-            with engine.begin() as conn:
-                a, b = sorted([sender, receiver])
-                conn.execute(text("""
-                    INSERT INTO chats (chat_id, user_a, user_b, created_at)
-                    VALUES (:chat_id, :user_a, :user_b, :created_at)
-                    ON CONFLICT (chat_id) DO NOTHING
-                """), {"chat_id": cid, "user_a": a, "user_b": b, "created_at": now_iso()})
-                result = conn.execute(text("""
-                    INSERT INTO messages (
-                        chat_id, sender, receiver, original_text, translated_text,
-                        source_lang, target_lang, client_message_id, status, created_at
-                    ) VALUES (
-                        :chat_id, :sender, :receiver, :original_text, :translated_text,
-                        :source_lang, :target_lang, :client_message_id, :status, :created_at
-                    ) RETURNING *
-                """), {
-                    "chat_id": cid,
-                    "sender": sender,
-                    "receiver": receiver,
-                    "original_text": text_value,
-                    "translated_text": translated,
-                    "source_lang": sender_lang,
-                    "target_lang": receiver_lang,
-                    "client_message_id": client_message_id,
-                    "status": "translated",
-                    "created_at": now_iso(),
-                })
-                row = result.fetchone()
-
-            message = message_to_dict(row)
-
-            await send_to_user(receiver, message)
-            await send_to_user(sender, message)
+            await create_and_deliver_message(cid, sender, receiver, text_value, client_message_id, "text")
 
     except WebSocketDisconnect:
         pass
