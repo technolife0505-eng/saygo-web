@@ -6,149 +6,57 @@
   <title>SayGo Web MVP</title>
   <style>
     :root {
-      --bg: #f4f6fb;
-      --card: #ffffff;
-      --primary: #111827;
-      --primary2: #2563eb;
-      --muted: #6b7280;
-      --line: #e5e7eb;
-      --me: #dbeafe;
-      --them: #f3f4f6;
-      --danger: #dc2626;
-      --ok: #16a34a;
+      --bg: #f4f6fb; --card: #ffffff; --primary: #111827; --primary2: #2563eb;
+      --muted: #6b7280; --line: #e5e7eb; --me: #dbeafe; --them: #f3f4f6;
+      --danger: #dc2626; --ok: #16a34a;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: var(--bg);
-      color: #111827;
-    }
-    .layout {
-      max-width: 1120px;
-      margin: 0 auto;
-      padding: 20px;
-      display: grid;
-      grid-template-columns: 340px 1fr;
-      gap: 16px;
-      min-height: 100vh;
-    }
-    .panel, .chat-panel {
-      background: var(--card);
-      border-radius: 20px;
-      box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08);
-      overflow: hidden;
-    }
-    .side-header, .chat-header {
-      padding: 18px;
-      border-bottom: 1px solid var(--line);
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 24px;
-      font-weight: 800;
-    }
-    .logo {
-      width: 38px;
-      height: 38px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, #111827, #2563eb);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-    }
-    .body { padding: 16px; }
-    label {
-      display: block;
-      margin-top: 12px;
-      margin-bottom: 6px;
-      color: #374151;
-      font-size: 13px;
-      font-weight: 700;
-    }
-    input, select, button {
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 12px 13px;
-      font-size: 15px;
-      outline: none;
-    }
+    body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: #111827; }
+    .layout { max-width: 1180px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 360px 1fr; gap: 16px; min-height: 100vh; }
+    .panel, .chat-panel { background: var(--card); border-radius: 20px; box-shadow: 0 12px 34px rgba(15,23,42,.08); overflow: hidden; }
+    .side-header, .chat-header { padding: 16px; border-bottom: 1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:10px; font-size:24px; font-weight:900; }
+    .logo { width:38px; height:38px; border-radius:12px; background:linear-gradient(135deg,#111827,#2563eb); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:900; }
+    .body { padding: 14px; }
+    label { display:block; margin-top:12px; margin-bottom:6px; color:#374151; font-size:13px; font-weight:700; }
+    input, select, button { width:100%; border:1px solid var(--line); border-radius:12px; padding:12px 13px; font-size:15px; outline:none; }
     input:focus, select:focus { border-color: var(--primary2); }
-    button {
-      border: none;
-      background: var(--primary);
-      color: white;
-      font-weight: 800;
-      cursor: pointer;
-      margin-top: 12px;
-    }
-    button.secondary { background: #e5e7eb; color: #111827; }
-    button.blue { background: var(--primary2); }
-    button:disabled { opacity: .55; cursor: not-allowed; }
-    .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
-    .status { margin-top: 10px; font-size: 13px; padding: 9px 10px; border-radius: 10px; background: #f3f4f6; color: #374151; }
-    .status.ok { background: #dcfce7; color: #166534; }
-    .status.err { background: #fee2e2; color: #991b1b; }
-    .contact {
-      padding: 12px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      margin-top: 10px;
-      cursor: pointer;
-      background: #fff;
-    }
-    .contact:hover { border-color: var(--primary2); }
-    .contact .name { font-weight: 800; }
-    .contact .nick { color: var(--muted); font-size: 13px; margin-top: 3px; }
-    .chat-panel { display: flex; flex-direction: column; min-height: calc(100vh - 40px); }
-    .chat-title { font-weight: 900; font-size: 20px; }
-    .chat-sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
-    .messages {
-      flex: 1;
-      padding: 18px;
-      overflow-y: auto;
-      background: linear-gradient(180deg, #f8fafc, #eef2ff);
-    }
-    .empty {
-      color: var(--muted);
-      text-align: center;
-      margin-top: 80px;
-      line-height: 1.5;
-    }
-    .msg-wrap { display: flex; margin: 10px 0; }
-    .msg-wrap.me { justify-content: flex-end; }
-    .bubble {
-      max-width: 74%;
-      border-radius: 18px;
-      padding: 11px 13px;
-      background: var(--them);
-      box-shadow: 0 4px 12px rgba(15,23,42,.04);
-    }
-    .msg-wrap.me .bubble { background: var(--me); }
-    .bubble .text { font-size: 15px; line-height: 1.38; white-space: pre-wrap; }
-    .bubble .meta { font-size: 11px; color: var(--muted); margin-top: 7px; }
-    .bubble.pending { opacity: .82; }
-    .original { margin-top: 7px; color: #4b5563; font-size: 12px; border-top: 1px solid rgba(0,0,0,.08); padding-top: 7px; }
-    .status-text { color: #2563eb; font-weight: 600; }
-    .composer {
-      padding: 14px;
-      display: flex;
-      gap: 10px;
-      border-top: 1px solid var(--line);
-      background: white;
-    }
-    .composer input { flex: 1; }
-    .composer button { width: 120px; margin-top: 0; }
-    @media (max-width: 820px) {
-      .layout { grid-template-columns: 1fr; padding: 10px; }
-      .chat-panel { min-height: 620px; }
-      .bubble { max-width: 86%; }
-    }
+    button { border:none; background:var(--primary); color:#fff; font-weight:800; cursor:pointer; margin-top:10px; }
+    button.secondary { background:#e5e7eb; color:#111827; }
+    button.blue { background:var(--primary2); }
+    button.green { background:var(--ok); }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    .hint { font-size:12px; color:var(--muted); margin-top:8px; line-height:1.4; }
+    .status { margin-top:10px; font-size:13px; padding:9px 10px; border-radius:10px; background:#f3f4f6; color:#374151; }
+    .status.ok { background:#dcfce7; color:#166534; } .status.err { background:#fee2e2; color:#991b1b; }
+    .section-title { margin: 18px 0 8px; font-size: 15px; font-weight: 900; }
+    .row { display:flex; gap:8px; }
+    .row input { flex:1; } .row button { width:96px; margin-top:0; }
+    .tabs { display:flex; gap:8px; margin:14px 0 4px; }
+    .tab { flex:1; padding:10px; border-radius:12px; border:1px solid var(--line); background:#f9fafb; color:#111827; font-weight:800; cursor:pointer; text-align:center; }
+    .tab.active { background:#111827; color:white; border-color:#111827; }
+    .list-item { padding:12px; border:1px solid var(--line); border-radius:14px; margin-top:9px; cursor:pointer; background:#fff; }
+    .list-item:hover { border-color:var(--primary2); }
+    .list-item.active { border-color:var(--primary2); background:#eff6ff; }
+    .list-top { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .name { font-weight:900; } .nick, .small { color:var(--muted); font-size:12px; margin-top:4px; }
+    .last { margin-top:7px; color:#374151; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .result-actions { display:flex; gap:8px; margin-top:10px; }
+    .result-actions button { margin-top:0; padding:9px; font-size:13px; }
+    .chat-panel { display:flex; flex-direction:column; min-height:calc(100vh - 32px); }
+    .chat-title { font-weight:900; font-size:20px; } .chat-sub { color:var(--muted); font-size:13px; margin-top:4px; }
+    .messages { flex:1; padding:18px; overflow-y:auto; background:linear-gradient(180deg,#f8fafc,#eef2ff); }
+    .empty { color:var(--muted); text-align:center; margin-top:80px; line-height:1.5; }
+    .msg-wrap { display:flex; margin:10px 0; } .msg-wrap.me { justify-content:flex-end; }
+    .bubble { max-width:74%; border-radius:18px; padding:11px 13px; background:var(--them); box-shadow:0 4px 12px rgba(15,23,42,.04); }
+    .msg-wrap.me .bubble { background:var(--me); } .bubble.pending { opacity:.82; }
+    .bubble .text { font-size:15px; line-height:1.38; white-space:pre-wrap; }
+    .bubble .meta { font-size:11px; color:var(--muted); margin-top:7px; }
+    .original { margin-top:7px; color:#4b5563; font-size:12px; border-top:1px solid rgba(0,0,0,.08); padding-top:7px; }
+    .status-text { color:#2563eb; font-weight:700; }
+    .composer { padding:14px; display:flex; gap:10px; border-top:1px solid var(--line); background:#fff; }
+    .composer input { flex:1; } .composer button { width:120px; margin-top:0; }
+    @media (max-width: 860px) { .layout { grid-template-columns:1fr; padding:10px; } .chat-panel { min-height:620px; } .bubble { max-width:86%; } }
   </style>
 </head>
 <body>
@@ -156,48 +64,42 @@
     <aside class="panel">
       <div class="side-header">
         <div class="brand"><div class="logo">S</div><div>SayGo</div></div>
-        <div class="hint">Tarjima qiluvchi web chat MVP. Hozircha demo ma'lumotlar xotirada saqlanadi.</div>
+        <div class="hint">v3: chatlar ro‘yxati, kontaktlar, nickname qidirish va PostgreSQL saqlash.</div>
       </div>
 
       <div class="body">
         <label>Sizning nickname</label>
         <input id="myNick" placeholder="@asadulla" />
-
         <label>Ismingiz</label>
         <input id="displayName" placeholder="Asadulla" />
-
         <label>Sizning asosiy tilingiz</label>
-        <select id="myLang">
-          <option value="uz">O‘zbekcha</option>
-          <option value="ru">Русский</option>
-          <option value="en">English</option>
-        </select>
-
+        <select id="myLang"><option value="uz">O‘zbekcha</option><option value="ru">Русский</option><option value="en">English</option></select>
         <button class="blue" onclick="register()">Kirish / ro‘yxatdan o‘tish</button>
         <div id="loginStatus" class="status">Avval ro‘yxatdan o‘ting.</div>
 
-        <hr style="border:0;border-top:1px solid #e5e7eb;margin:18px 0;" />
+        <div class="section-title">Nickname orqali qidirish</div>
+        <div class="row">
+          <input id="searchNick" placeholder="@ivan" onkeydown="if(event.key==='Enter') searchUsers()" />
+          <button onclick="searchUsers()">Qidirish</button>
+        </div>
+        <div id="searchResults"></div>
 
-        <label>Suhbatdosh nickname</label>
-        <input id="friendNick" placeholder="@ivan" />
-        <button onclick="startChatFromInput()">Chat ochish</button>
-        <button class="secondary" onclick="loadContacts()">Kontaktlarni yangilash</button>
-
-        <div class="hint">Test uchun 2 ta brauzer oynasida 2 xil user oching: masalan @asadulla / uz va @ivan / ru.</div>
-
-        <h3 style="margin-top:20px;">Kontaktlar</h3>
-        <div id="contacts"></div>
+        <div class="tabs">
+          <div id="tabChats" class="tab active" onclick="showTab('chats')">Chatlar</div>
+          <div id="tabContacts" class="tab" onclick="showTab('contacts')">Kontaktlar</div>
+        </div>
+        <button class="secondary" onclick="refreshLists()">Yangilash</button>
+        <div id="chatsBox"></div>
+        <div id="contactsBox" style="display:none"></div>
       </div>
     </aside>
 
     <main class="chat-panel">
       <div class="chat-header">
         <div id="chatTitle" class="chat-title">Chat tanlanmagan</div>
-        <div id="chatSub" class="chat-sub">Nickname orqali suhbatdosh topib chat oching.</div>
+        <div id="chatSub" class="chat-sub">Nickname qidiring yoki chatlar ro‘yxatidan tanlang.</div>
       </div>
-      <div id="messages" class="messages">
-        <div class="empty">SayGo’da har kim o‘z tilida yozadi, suhbatdosh esa o‘z tilida ko‘radi.</div>
-      </div>
+      <div id="messages" class="messages"><div class="empty">SayGo’da har kim o‘z tilida yozadi, suhbatdosh esa o‘z tilida ko‘radi.</div></div>
       <div class="composer">
         <input id="messageInput" placeholder="Xabar yozing..." onkeydown="if(event.key==='Enter') sendMessage()" />
         <button onclick="sendMessage()">Yuborish</button>
@@ -205,225 +107,127 @@
     </main>
   </div>
 
-  <script>
-    const API = window.location.origin;
-    const WS = (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
+<script>
+const API = window.location.origin;
+const WS = (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
+let socket = null, me = null, myLang = null, friend = null, friendProfile = null, chatId = null, activeTab = 'chats';
 
-    let socket = null;
-    let me = null;
-    let myLang = null;
-    let friend = null;
-    let friendProfile = null;
-    let chatId = null;
+function normalizeNick(nick){ nick=(nick||'').trim().toLowerCase().replaceAll(' ',''); if(!nick.startsWith('@')) nick='@'+nick; return nick; }
+function setStatus(text, kind=''){ const el=document.getElementById('loginStatus'); el.className='status '+kind; el.textContent=text; }
+async function api(path, options={}){ const res=await fetch(API+path,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}}); if(!res.ok){ const err=await res.json().catch(()=>({detail:res.statusText})); throw new Error(err.detail||'Xatolik'); } return res.json(); }
+function escapeHtml(str){ return String(str||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
+function cssEscape(value){ if(window.CSS&&CSS.escape) return CSS.escape(value); return String(value).replace(/[^a-zA-Z0-9_-]/g,'\\$&'); }
 
-    function normalizeNick(nick) {
-      nick = (nick || "").trim().toLowerCase().replaceAll(" ", "");
-      if (!nick.startsWith("@")) nick = "@" + nick;
-      return nick;
-    }
+async function register(){
+  try{
+    me=normalizeNick(document.getElementById('myNick').value);
+    myLang=document.getElementById('myLang').value;
+    const displayName=document.getElementById('displayName').value||me;
+    const user=await api('/api/register',{method:'POST',body:JSON.stringify({nickname:me,display_name:displayName,language:myLang})});
+    localStorage.setItem('saygo_me',JSON.stringify(user));
+    connectSocket();
+    setStatus(`Kirdingiz: ${user.display_name} (${user.nickname})`,'ok');
+    await refreshLists();
+  }catch(e){ setStatus(e.message,'err'); }
+}
+function connectSocket(){
+  if(socket) socket.close();
+  socket=new WebSocket(`${WS}/ws/${encodeURIComponent(me)}`);
+  socket.onopen=()=>setStatus(`Online: ${me}`,'ok');
+  socket.onclose=()=>setStatus(`Offline: ${me}. Qayta kiring.`,'err');
+  socket.onmessage=(event)=>{ const msg=JSON.parse(event.data); if(msg.type==='message'){ addMessage(msg); loadChats(); } if(msg.type==='error') alert(msg.detail); };
+}
+function showTab(tab){ activeTab=tab; document.getElementById('tabChats').classList.toggle('active',tab==='chats'); document.getElementById('tabContacts').classList.toggle('active',tab==='contacts'); document.getElementById('chatsBox').style.display=tab==='chats'?'block':'none'; document.getElementById('contactsBox').style.display=tab==='contacts'?'block':'none'; }
+async function refreshLists(){ await Promise.all([loadChats(),loadContacts()]); }
 
-    function setStatus(text, kind = "") {
-      const el = document.getElementById("loginStatus");
-      el.className = "status " + kind;
-      el.textContent = text;
-    }
-
-    async function api(path, options = {}) {
-      const res = await fetch(API + path, {
-        ...options,
-        headers: {
-          "Content-Type": "application/json",
-          ...(options.headers || {})
-        }
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({detail: res.statusText}));
-        throw new Error(err.detail || "Xatolik");
-      }
-      return res.json();
-    }
-
-    async function register() {
-      try {
-        me = normalizeNick(document.getElementById("myNick").value);
-        myLang = document.getElementById("myLang").value;
-        const displayName = document.getElementById("displayName").value || me;
-
-        const user = await api("/api/register", {
-          method: "POST",
-          body: JSON.stringify({ nickname: me, display_name: displayName, language: myLang })
-        });
-
-        localStorage.setItem("saygo_me", JSON.stringify(user));
-        connectSocket();
-        setStatus(`Kirdingiz: ${user.display_name} (${user.nickname})`, "ok");
-        await loadContacts();
-      } catch (e) {
-        setStatus(e.message, "err");
-      }
-    }
-
-    function connectSocket() {
-      if (socket) socket.close();
-      socket = new WebSocket(`${WS}/ws/${encodeURIComponent(me)}`);
-      socket.onopen = () => setStatus(`Online: ${me}`, "ok");
-      socket.onclose = () => setStatus(`Offline: ${me}. Qayta kirib ko‘ring.`, "err");
-      socket.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "message") addMessage(msg);
-        if (msg.type === "error") alert(msg.detail);
-      };
-    }
-
-    async function startChatFromInput() {
-      const nick = normalizeNick(document.getElementById("friendNick").value);
-      await startChat(nick);
-    }
-
-    async function startChat(nick) {
-      if (!me) return alert("Avval ro‘yxatdan o‘ting");
-      try {
-        friend = normalizeNick(nick);
-        const data = await api("/api/chats/start", {
-          method: "POST",
-          body: JSON.stringify({ user_a: me, user_b: friend })
-        });
-        chatId = data.chat_id;
-        friendProfile = data.user_a.nickname === me ? data.user_b : data.user_a;
-
-        document.getElementById("chatTitle").textContent = `${friendProfile.display_name} ${friendProfile.nickname}`;
-        document.getElementById("chatSub").textContent = `Siz: ${myLang || "?"} → U: ${friendProfile.language}`;
-        document.getElementById("messages").innerHTML = "";
-        data.messages.forEach(addMessage);
-        await loadContacts();
-      } catch (e) {
-        alert(e.message);
-      }
-    }
-
-    async function loadContacts() {
-      const box = document.getElementById("contacts");
-      if (!me) {
-        box.innerHTML = "<div class='hint'>Kontaktlar uchun avval kiring.</div>";
-        return;
-      }
-      try {
-        const list = await api(`/api/contacts/${encodeURIComponent(me)}`);
-        if (!list.length) {
-          box.innerHTML = "<div class='hint'>Hozircha kontakt yo‘q.</div>";
-          return;
-        }
-        box.innerHTML = list.map(u => `
-          <div class="contact" onclick="startChat('${u.nickname}')">
-            <div class="name">${escapeHtml(u.display_name)}</div>
-            <div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language)}</div>
-          </div>
-        `).join("");
-      } catch (e) {
-        box.innerHTML = `<div class='hint'>${escapeHtml(e.message)}</div>`;
-      }
-    }
-
-    function sendMessage() {
-      const input = document.getElementById("messageInput");
-      const text = input.value.trim();
-      if (!text) return;
-      if (!socket || socket.readyState !== WebSocket.OPEN) return alert("WebSocket ulanmagan. Qayta kiring.");
-      if (!chatId || !friend) return alert("Avval chat oching.");
-
-      const clientMessageId = `local_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-
-      // Optimistic UI: xabar server/OpenAI javobini kutmasdan darhol ekranga chiqadi
-      addMessage({
-        type: "message",
-        id: clientMessageId,
-        client_message_id: clientMessageId,
-        chat_id: chatId,
-        sender: me,
-        receiver: friend,
-        original_text: text,
-        translated_text: "Tarjima qilinmoqda...",
-        source_lang: myLang || "?",
-        target_lang: (friendProfile && friendProfile.language) || "?",
-        status: "translating",
-        created_at: new Date().toISOString()
-      });
-
-      socket.send(JSON.stringify({
-        chat_id: chatId,
-        sender: me,
-        receiver: friend,
-        text,
-        client_message_id: clientMessageId
-      }));
-      input.value = "";
-      input.focus();
-    }
-
-    function addMessage(msg) {
-      if (chatId && msg.chat_id !== chatId) return;
-      const messages = document.getElementById("messages");
-      const empty = messages.querySelector(".empty");
-      if (empty) empty.remove();
-
-      const isMe = msg.sender === me;
-      const key = msg.client_message_id || msg.id;
-      let wrap = key ? messages.querySelector(`[data-message-key="${cssEscape(key)}"]`) : null;
-
-      if (!wrap) {
-        wrap = document.createElement("div");
-        wrap.className = "msg-wrap " + (isMe ? "me" : "");
-        if (key) wrap.dataset.messageKey = key;
-        messages.appendChild(wrap);
-      } else {
-        wrap.className = "msg-wrap " + (isMe ? "me" : "");
-      }
-
-      const translatedText = msg.translated_text || "Tarjima mavjud emas";
-      const shownText = isMe ? msg.original_text : translatedText;
-      const originalLine = isMe ? `Tarjima: ${translatedText}` : `Original: ${msg.original_text}`;
-      const statusLabel = msg.status === "translating" ? " · tarjima qilinmoqda" : " · tarjima qilindi";
-      const bubbleClass = msg.status === "translating" ? "bubble pending" : "bubble";
-
-      wrap.innerHTML = `
-        <div class="${bubbleClass}">
-          <div class="text">${escapeHtml(shownText)}</div>
-          <div class="original ${msg.status === "translating" ? "status-text" : ""}">${escapeHtml(originalLine)}</div>
-          <div class="meta">${escapeHtml(msg.sender)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}${escapeHtml(statusLabel)}</div>
+async function searchUsers(){
+  const box=document.getElementById('searchResults');
+  if(!me){ box.innerHTML="<div class='hint'>Avval ro‘yxatdan o‘ting.</div>"; return; }
+  const q=document.getElementById('searchNick').value.trim();
+  if(!q){ box.innerHTML="<div class='hint'>Nickname yozing.</div>"; return; }
+  try{
+    const list=await api(`/api/search?q=${encodeURIComponent(q)}`);
+    const filtered=list.filter(u=>u.nickname!==me);
+    if(!filtered.length){ box.innerHTML="<div class='hint'>Foydalanuvchi topilmadi.</div>"; return; }
+    box.innerHTML=filtered.map(u=>`
+      <div class="list-item">
+        <div class="list-top"><div><div class="name">${escapeHtml(u.display_name)}</div><div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language)}</div></div></div>
+        <div class="result-actions">
+          <button class="blue" onclick="startChat('${u.nickname}')">Chat</button>
+          <button class="green" onclick="addContact('${u.nickname}')">Kontaktga qo‘shish</button>
         </div>
-      `;
-      messages.scrollTop = messages.scrollHeight;
-    }
+      </div>`).join('');
+  }catch(e){ box.innerHTML=`<div class='hint'>${escapeHtml(e.message)}</div>`; }
+}
+async function addContact(nick){
+  try{ await api('/api/contacts/add',{method:'POST',body:JSON.stringify({owner:me,contact:normalizeNick(nick)})}); await loadContacts(); alert('Kontakt qo‘shildi'); }
+  catch(e){ alert(e.message); }
+}
 
-    function cssEscape(value) {
-      if (window.CSS && CSS.escape) return CSS.escape(value);
-      return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
-    }
+async function loadContacts(){
+  const box=document.getElementById('contactsBox');
+  if(!me){ box.innerHTML="<div class='hint'>Kontaktlar uchun avval kiring.</div>"; return; }
+  try{
+    const list=await api(`/api/contacts/${encodeURIComponent(me)}`);
+    if(!list.length){ box.innerHTML="<div class='hint'>Hozircha kontakt yo‘q.</div>"; return; }
+    box.innerHTML=list.map(u=>`<div class="list-item" onclick="startChat('${u.nickname}')"><div class="name">${escapeHtml(u.display_name)}</div><div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language)}</div></div>`).join('');
+  }catch(e){ box.innerHTML=`<div class='hint'>${escapeHtml(e.message)}</div>`; }
+}
+async function loadChats(){
+  const box=document.getElementById('chatsBox');
+  if(!me){ box.innerHTML="<div class='hint'>Chatlar uchun avval kiring.</div>"; return; }
+  try{
+    const list=await api(`/api/chats/${encodeURIComponent(me)}`);
+    if(!list.length){ box.innerHTML="<div class='hint'>Hozircha chat yo‘q. Nickname qidirib chat boshlang.</div>"; return; }
+    box.innerHTML=list.map(c=>{
+      const u=c.other||{}; const lm=c.last_message;
+      const preview=lm ? (lm.sender===me ? lm.original_text : lm.translated_text) : 'Yangi chat';
+      return `<div class="list-item ${c.chat_id===chatId?'active':''}" onclick="startChat('${u.nickname}')"><div class="list-top"><div><div class="name">${escapeHtml(u.display_name||u.nickname)}</div><div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language||'')}</div></div></div><div class="last">${escapeHtml(preview)}</div></div>`;
+    }).join('');
+  }catch(e){ box.innerHTML=`<div class='hint'>${escapeHtml(e.message)}</div>`; }
+}
 
-    function escapeHtml(str) {
-      return String(str || "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
+async function startChat(nick){
+  if(!me) return alert('Avval ro‘yxatdan o‘ting');
+  try{
+    friend=normalizeNick(nick);
+    const data=await api('/api/chats/start',{method:'POST',body:JSON.stringify({user_a:me,user_b:friend})});
+    chatId=data.chat_id;
+    friendProfile=data.user_a.nickname===me ? data.user_b : data.user_a;
+    document.getElementById('chatTitle').textContent=`${friendProfile.display_name} ${friendProfile.nickname}`;
+    document.getElementById('chatSub').textContent=`Siz: ${myLang||'?'} → U: ${friendProfile.language}`;
+    document.getElementById('messages').innerHTML='';
+    data.messages.forEach(addMessage);
+    if(!data.messages.length) document.getElementById('messages').innerHTML='<div class="empty">Chat ochildi. Birinchi xabarni yozing.</div>';
+    await refreshLists();
+  }catch(e){ alert(e.message); }
+}
 
-    window.addEventListener("load", async () => {
-      const saved = localStorage.getItem("saygo_me");
-      if (saved) {
-        const user = JSON.parse(saved);
-        document.getElementById("myNick").value = user.nickname;
-        document.getElementById("displayName").value = user.display_name;
-        document.getElementById("myLang").value = user.language;
-      }
-      try {
-        const health = await api("/api/health");
-        if (!health.openai_key_configured) {
-          setStatus("OPENAI_API_KEY yo‘q. Tarjima demo rejimida ishlaydi.", "err");
-        }
-      } catch (_) {}
-    });
-  </script>
+function sendMessage(){
+  const input=document.getElementById('messageInput'); const text=input.value.trim();
+  if(!text) return; if(!socket||socket.readyState!==WebSocket.OPEN) return alert('WebSocket ulanmagan. Qayta kiring.'); if(!chatId||!friend) return alert('Avval chat oching.');
+  const clientMessageId=`local_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  addMessage({type:'message',id:clientMessageId,client_message_id:clientMessageId,chat_id:chatId,sender:me,receiver:friend,original_text:text,translated_text:'Tarjima qilinmoqda...',source_lang:myLang||'?',target_lang:(friendProfile&&friendProfile.language)||'?',status:'translating',created_at:new Date().toISOString()});
+  socket.send(JSON.stringify({chat_id:chatId,sender:me,receiver:friend,text,client_message_id:clientMessageId}));
+  input.value=''; input.focus();
+}
+function addMessage(msg){
+  if(chatId&&msg.chat_id!==chatId) return;
+  const messages=document.getElementById('messages'); const empty=messages.querySelector('.empty'); if(empty) empty.remove();
+  const isMe=msg.sender===me; const key=msg.client_message_id||msg.id; let wrap=key?messages.querySelector(`[data-message-key="${cssEscape(key)}"]`):null;
+  if(!wrap){ wrap=document.createElement('div'); wrap.className='msg-wrap '+(isMe?'me':''); if(key) wrap.dataset.messageKey=key; messages.appendChild(wrap); } else { wrap.className='msg-wrap '+(isMe?'me':''); }
+  const translatedText=msg.translated_text||'Tarjima mavjud emas'; const shownText=isMe?msg.original_text:translatedText;
+  const originalLine=isMe?`Tarjima: ${translatedText}`:`Original: ${msg.original_text}`;
+  const statusLabel=msg.status==='translating'?' · tarjima qilinmoqda':' · tarjima qilindi'; const bubbleClass=msg.status==='translating'?'bubble pending':'bubble';
+  wrap.innerHTML=`<div class="${bubbleClass}"><div class="text">${escapeHtml(shownText)}</div><div class="original ${msg.status==='translating'?'status-text':''}">${escapeHtml(originalLine)}</div><div class="meta">${escapeHtml(msg.sender)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}${escapeHtml(statusLabel)}</div></div>`;
+  messages.scrollTop=messages.scrollHeight;
+}
+
+window.addEventListener('load',async()=>{
+  const saved=localStorage.getItem('saygo_me');
+  if(saved){ const user=JSON.parse(saved); document.getElementById('myNick').value=user.nickname; document.getElementById('displayName').value=user.display_name; document.getElementById('myLang').value=user.language; }
+  try{ const health=await api('/api/health'); if(!health.openai_key_configured) setStatus('OPENAI_API_KEY yo‘q. Tarjima demo rejimida ishlaydi.','err'); }catch(_){ }
+});
+</script>
 </body>
 </html>
