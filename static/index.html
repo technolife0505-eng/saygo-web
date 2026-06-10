@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SayGo Web MVP</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --card: #ffffff;
+      --primary: #111827;
+      --primary2: #2563eb;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --me: #dbeafe;
+      --them: #f3f4f6;
+      --danger: #dc2626;
+      --ok: #16a34a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: #111827;
+    }
+    .layout {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 16px;
+      min-height: 100vh;
+    }
+    .panel, .chat-panel {
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+    .side-header, .chat-header {
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 24px;
+      font-weight: 800;
+    }
+    .logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #111827, #2563eb);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+    }
+    .body { padding: 16px; }
+    label {
+      display: block;
+      margin-top: 12px;
+      margin-bottom: 6px;
+      color: #374151;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    input, select, button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 13px;
+      font-size: 15px;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--primary2); }
+    button {
+      border: none;
+      background: var(--primary);
+      color: white;
+      font-weight: 800;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+    button.secondary { background: #e5e7eb; color: #111827; }
+    button.blue { background: var(--primary2); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+    .status { margin-top: 10px; font-size: 13px; padding: 9px 10px; border-radius: 10px; background: #f3f4f6; color: #374151; }
+    .status.ok { background: #dcfce7; color: #166534; }
+    .status.err { background: #fee2e2; color: #991b1b; }
+    .contact {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      margin-top: 10px;
+      cursor: pointer;
+      background: #fff;
+    }
+    .contact:hover { border-color: var(--primary2); }
+    .contact .name { font-weight: 800; }
+    .contact .nick { color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .chat-panel { display: flex; flex-direction: column; min-height: calc(100vh - 40px); }
+    .chat-title { font-weight: 900; font-size: 20px; }
+    .chat-sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .messages {
+      flex: 1;
+      padding: 18px;
+      overflow-y: auto;
+      background: linear-gradient(180deg, #f8fafc, #eef2ff);
+    }
+    .empty {
+      color: var(--muted);
+      text-align: center;
+      margin-top: 80px;
+      line-height: 1.5;
+    }
+    .msg-wrap { display: flex; margin: 10px 0; }
+    .msg-wrap.me { justify-content: flex-end; }
+    .bubble {
+      max-width: 74%;
+      border-radius: 18px;
+      padding: 11px 13px;
+      background: var(--them);
+      box-shadow: 0 4px 12px rgba(15,23,42,.04);
+    }
+    .msg-wrap.me .bubble { background: var(--me); }
+    .bubble .text { font-size: 15px; line-height: 1.38; white-space: pre-wrap; }
+    .bubble .meta { font-size: 11px; color: var(--muted); margin-top: 7px; }
+    .original { margin-top: 7px; color: #4b5563; font-size: 12px; border-top: 1px solid rgba(0,0,0,.08); padding-top: 7px; }
+    .composer {
+      padding: 14px;
+      display: flex;
+      gap: 10px;
+      border-top: 1px solid var(--line);
+      background: white;
+    }
+    .composer input { flex: 1; }
+    .composer button { width: 120px; margin-top: 0; }
+    @media (max-width: 820px) {
+      .layout { grid-template-columns: 1fr; padding: 10px; }
+      .chat-panel { min-height: 620px; }
+      .bubble { max-width: 86%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="panel">
+      <div class="side-header">
+        <div class="brand"><div class="logo">S</div><div>SayGo</div></div>
+        <div class="hint">Tarjima qiluvchi web chat MVP. Hozircha demo ma'lumotlar xotirada saqlanadi.</div>
+      </div>
+
+      <div class="body">
+        <label>Sizning nickname</label>
+        <input id="myNick" placeholder="@asadulla" />
+
+        <label>Ismingiz</label>
+        <input id="displayName" placeholder="Asadulla" />
+
+        <label>Sizning asosiy tilingiz</label>
+        <select id="myLang">
+          <option value="uz">O‘zbekcha</option>
+          <option value="ru">Русский</option>
+          <option value="en">English</option>
+        </select>
+
+        <button class="blue" onclick="register()">Kirish / ro‘yxatdan o‘tish</button>
+        <div id="loginStatus" class="status">Avval ro‘yxatdan o‘ting.</div>
+
+        <hr style="border:0;border-top:1px solid #e5e7eb;margin:18px 0;" />
+
+        <label>Suhbatdosh nickname</label>
+        <input id="friendNick" placeholder="@ivan" />
+        <button onclick="startChatFromInput()">Chat ochish</button>
+        <button class="secondary" onclick="loadContacts()">Kontaktlarni yangilash</button>
+
+        <div class="hint">Test uchun 2 ta brauzer oynasida 2 xil user oching: masalan @asadulla / uz va @ivan / ru.</div>
+
+        <h3 style="margin-top:20px;">Kontaktlar</h3>
+        <div id="contacts"></div>
+      </div>
+    </aside>
+
+    <main class="chat-panel">
+      <div class="chat-header">
+        <div id="chatTitle" class="chat-title">Chat tanlanmagan</div>
+        <div id="chatSub" class="chat-sub">Nickname orqali suhbatdosh topib chat oching.</div>
+      </div>
+      <div id="messages" class="messages">
+        <div class="empty">SayGo’da har kim o‘z tilida yozadi, suhbatdosh esa o‘z tilida ko‘radi.</div>
+      </div>
+      <div class="composer">
+        <input id="messageInput" placeholder="Xabar yozing..." onkeydown="if(event.key==='Enter') sendMessage()" />
+        <button onclick="sendMessage()">Yuborish</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API = window.location.origin;
+    const WS = (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
+
+    let socket = null;
+    let me = null;
+    let myLang = null;
+    let friend = null;
+    let friendProfile = null;
+    let chatId = null;
+
+    function normalizeNick(nick) {
+      nick = (nick || "").trim().toLowerCase().replaceAll(" ", "");
+      if (!nick.startsWith("@")) nick = "@" + nick;
+      return nick;
+    }
+
+    function setStatus(text, kind = "") {
+      const el = document.getElementById("loginStatus");
+      el.className = "status " + kind;
+      el.textContent = text;
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(API + path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {})
+        }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({detail: res.statusText}));
+        throw new Error(err.detail || "Xatolik");
+      }
+      return res.json();
+    }
+
+    async function register() {
+      try {
+        me = normalizeNick(document.getElementById("myNick").value);
+        myLang = document.getElementById("myLang").value;
+        const displayName = document.getElementById("displayName").value || me;
+
+        const user = await api("/api/register", {
+          method: "POST",
+          body: JSON.stringify({ nickname: me, display_name: displayName, language: myLang })
+        });
+
+        localStorage.setItem("saygo_me", JSON.stringify(user));
+        connectSocket();
+        setStatus(`Kirdingiz: ${user.display_name} (${user.nickname})`, "ok");
+        await loadContacts();
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
+    }
+
+    function connectSocket() {
+      if (socket) socket.close();
+      socket = new WebSocket(`${WS}/ws/${encodeURIComponent(me)}`);
+      socket.onopen = () => setStatus(`Online: ${me}`, "ok");
+      socket.onclose = () => setStatus(`Offline: ${me}. Qayta kirib ko‘ring.`, "err");
+      socket.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "message") addMessage(msg);
+        if (msg.type === "error") alert(msg.detail);
+      };
+    }
+
+    async function startChatFromInput() {
+      const nick = normalizeNick(document.getElementById("friendNick").value);
+      await startChat(nick);
+    }
+
+    async function startChat(nick) {
+      if (!me) return alert("Avval ro‘yxatdan o‘ting");
+      try {
+        friend = normalizeNick(nick);
+        const data = await api("/api/chats/start", {
+          method: "POST",
+          body: JSON.stringify({ user_a: me, user_b: friend })
+        });
+        chatId = data.chat_id;
+        friendProfile = data.user_a.nickname === me ? data.user_b : data.user_a;
+
+        document.getElementById("chatTitle").textContent = `${friendProfile.display_name} ${friendProfile.nickname}`;
+        document.getElementById("chatSub").textContent = `Siz: ${myLang || "?"} → U: ${friendProfile.language}`;
+        document.getElementById("messages").innerHTML = "";
+        data.messages.forEach(addMessage);
+        await loadContacts();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function loadContacts() {
+      const box = document.getElementById("contacts");
+      if (!me) {
+        box.innerHTML = "<div class='hint'>Kontaktlar uchun avval kiring.</div>";
+        return;
+      }
+      try {
+        const list = await api(`/api/contacts/${encodeURIComponent(me)}`);
+        if (!list.length) {
+          box.innerHTML = "<div class='hint'>Hozircha kontakt yo‘q.</div>";
+          return;
+        }
+        box.innerHTML = list.map(u => `
+          <div class="contact" onclick="startChat('${u.nickname}')">
+            <div class="name">${escapeHtml(u.display_name)}</div>
+            <div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language)}</div>
+          </div>
+        `).join("");
+      } catch (e) {
+        box.innerHTML = `<div class='hint'>${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function sendMessage() {
+      const input = document.getElementById("messageInput");
+      const text = input.value.trim();
+      if (!text) return;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return alert("WebSocket ulanmagan. Qayta kiring.");
+      if (!chatId || !friend) return alert("Avval chat oching.");
+
+      socket.send(JSON.stringify({ chat_id: chatId, sender: me, receiver: friend, text }));
+      input.value = "";
+    }
+
+    function addMessage(msg) {
+      if (chatId && msg.chat_id !== chatId) return;
+      const messages = document.getElementById("messages");
+      const empty = messages.querySelector(".empty");
+      if (empty) empty.remove();
+
+      const isMe = msg.sender === me;
+      const wrap = document.createElement("div");
+      wrap.className = "msg-wrap " + (isMe ? "me" : "");
+
+      const shownText = isMe ? msg.original_text : msg.translated_text;
+      const originalLine = isMe ? `Tarjima: ${msg.translated_text}` : `Original: ${msg.original_text}`;
+
+      wrap.innerHTML = `
+        <div class="bubble">
+          <div class="text">${escapeHtml(shownText)}</div>
+          <div class="original">${escapeHtml(originalLine)}</div>
+          <div class="meta">${escapeHtml(msg.sender)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}</div>
+        </div>
+      `;
+      messages.appendChild(wrap);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    window.addEventListener("load", async () => {
+      const saved = localStorage.getItem("saygo_me");
+      if (saved) {
+        const user = JSON.parse(saved);
+        document.getElementById("myNick").value = user.nickname;
+        document.getElementById("displayName").value = user.display_name;
+        document.getElementById("myLang").value = user.language;
+      }
+      try {
+        const health = await api("/api/health");
+        if (!health.openai_key_configured) {
+          setStatus("OPENAI_API_KEY yo‘q. Tarjima demo rejimida ishlaydi.", "err");
+        }
+      } catch (_) {}
+    });
+  </script>
+</body>
+</html>
