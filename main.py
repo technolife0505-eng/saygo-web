@@ -254,6 +254,7 @@ async def websocket_endpoint(websocket: WebSocket, nickname: str):
             sender = normalize_nickname(data.get("sender", ""))
             receiver = normalize_nickname(data.get("receiver", ""))
             text = data.get("text", "").strip()
+            client_message_id = data.get("client_message_id")
 
             if sender not in users or receiver not in users:
                 await websocket.send_text(json.dumps({"type": "error", "detail": "User not found"}))
@@ -285,6 +286,8 @@ async def websocket_endpoint(websocket: WebSocket, nickname: str):
                 "source_lang": sender_lang,
                 "target_lang": receiver_lang,
                 "created_at": now_iso(),
+                "client_message_id": client_message_id,
+                "status": "translated",
             }
 
             chats.setdefault(cid, []).append(message)
