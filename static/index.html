@@ -72,7 +72,7 @@
     <aside class="panel">
       <div class="side-header">
         <div class="brand"><div class="logo">S</div><div>SayGo</div></div>
-        <div class="hint">v5: QR, chatlar, kontaktlar, online/typing va voice message tarjima.</div>
+        <div class="hint">v5.1: QR, chatlar, kontaktlar, online/typing va voice message fix.</div>
       </div>
 
       <div class="body">
@@ -316,13 +316,25 @@ async function toggleRecording(){
   try{
     const stream = await navigator.mediaDevices.getUserMedia({audio:true});
     recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
+    recordingStartedAt = Date.now();
+
+    let mimeType = '';
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+    else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+
+    mediaRecorder = mimeType ? new MediaRecorder(stream, {mimeType}) : new MediaRecorder(stream);
     mediaRecorder.ondataavailable = e => { if(e.data && e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = async () => {
       stream.getTracks().forEach(t=>t.stop());
-      await sendVoiceBlob(new Blob(recordedChunks, {type: mediaRecorder.mimeType || 'audio/webm'}));
+      const durationMs = Date.now() - recordingStartedAt;
+      const finalType = mediaRecorder.mimeType || mimeType || 'audio/webm';
+      if(durationMs < 900){
+        alert('Ovoz juda qisqa. Kamida 1 soniya yozing.');
+        return;
+      }
+      await sendVoiceBlob(new Blob(recordedChunks, {type: finalType}));
     };
-    mediaRecorder.start();
+    mediaRecorder.start(250);
     isRecording = true;
     const btn=document.getElementById('micBtn'); btn.classList.add('recording'); btn.textContent='⏹️';
   }catch(e){ alert('Mikrofon ochilmadi: '+e.message); }
@@ -333,7 +345,7 @@ function stopRecording(){
   const btn=document.getElementById('micBtn'); btn.classList.remove('recording'); btn.textContent='🎙️';
 }
 async function sendVoiceBlob(blob){
-  if(!blob || blob.size === 0) return;
+  if(!blob || blob.size < 1000){ alert('Audio juda qisqa yoki bo\'sh. Qayta yozing.'); return; }
   const clientMessageId=`voice_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   addMessage({type:'message',message_kind:'voice',id:clientMessageId,client_message_id:clientMessageId,chat_id:chatId,sender:me,receiver:friend,original_text:'🎙️ Voice message yuborildi',translated_text:'Ovoz matnga aylantirilmoqda...',source_lang:myLang||'?',target_lang:(friendProfile&&friendProfile.language)||'?',status:'translating',created_at:new Date().toISOString()});
   const fd = new FormData();
