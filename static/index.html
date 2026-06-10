@@ -44,7 +44,7 @@
     .result-actions { display:flex; gap:8px; margin-top:10px; }
     .result-actions button { margin-top:0; padding:9px; font-size:13px; }
     .chat-panel { display:flex; flex-direction:column; min-height:calc(100vh - 32px); }
-    .chat-title { font-weight:900; font-size:20px; } .chat-sub { color:var(--muted); font-size:13px; margin-top:4px; }
+    .chat-title { font-weight:900; font-size:20px; } .chat-sub { color:var(--muted); font-size:13px; margin-top:4px; } .typing { color:#2563eb; font-size:13px; font-weight:800; margin-top:4px; min-height:16px; } .online-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#9ca3af;margin-right:6px}.online-dot.on{background:#16a34a}
     .messages { flex:1; padding:18px; overflow-y:auto; background:linear-gradient(180deg,#f8fafc,#eef2ff); }
     .empty { color:var(--muted); text-align:center; margin-top:80px; line-height:1.5; }
     .msg-wrap { display:flex; margin:10px 0; } .msg-wrap.me { justify-content:flex-end; }
@@ -64,7 +64,7 @@
     <aside class="panel">
       <div class="side-header">
         <div class="brand"><div class="logo">S</div><div>SayGo</div></div>
-        <div class="hint">v3: chatlar ro‘yxati, kontaktlar, nickname qidirish va PostgreSQL saqlash.</div>
+        <div class="hint">v3.1: chatlar, kontaktlar, online/typing holati va xabar statuslari.</div>
       </div>
 
       <div class="body">
@@ -98,10 +98,11 @@
       <div class="chat-header">
         <div id="chatTitle" class="chat-title">Chat tanlanmagan</div>
         <div id="chatSub" class="chat-sub">Nickname qidiring yoki chatlar ro‘yxatidan tanlang.</div>
+        <div id="typingLine" class="typing"></div>
       </div>
       <div id="messages" class="messages"><div class="empty">SayGo’da har kim o‘z tilida yozadi, suhbatdosh esa o‘z tilida ko‘radi.</div></div>
       <div class="composer">
-        <input id="messageInput" placeholder="Xabar yozing..." onkeydown="if(event.key==='Enter') sendMessage()" />
+        <input id="messageInput" placeholder="Xabar yozing..." oninput="handleTyping()" onkeydown="if(event.key==='Enter') sendMessage()" />
         <button onclick="sendMessage()">Yuborish</button>
       </div>
     </main>
@@ -111,12 +112,17 @@
 const API = window.location.origin;
 const WS = (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
 let socket = null, me = null, myLang = null, friend = null, friendProfile = null, chatId = null, activeTab = 'chats';
+let typingTimer = null;
+const onlineMap = new Map();
 
 function normalizeNick(nick){ nick=(nick||'').trim().toLowerCase().replaceAll(' ',''); if(!nick.startsWith('@')) nick='@'+nick; return nick; }
 function setStatus(text, kind=''){ const el=document.getElementById('loginStatus'); el.className='status '+kind; el.textContent=text; }
 async function api(path, options={}){ const res=await fetch(API+path,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}}); if(!res.ok){ const err=await res.json().catch(()=>({detail:res.statusText})); throw new Error(err.detail||'Xatolik'); } return res.json(); }
 function escapeHtml(str){ return String(str||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
 function cssEscape(value){ if(window.CSS&&CSS.escape) return CSS.escape(value); return String(value).replace(/[^a-zA-Z0-9_-]/g,'\\$&'); }
+function formatTime(value){ try{ return new Date(value).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }catch(_){ return ''; } }
+function onlineLabel(nick){ return onlineMap.get(nick) ? 'online' : 'offline'; }
+function updateChatPresence(){ if(friend&&friendProfile){ const dot=onlineMap.get(friend)?'<span class="online-dot on"></span>':'<span class="online-dot"></span>'; document.getElementById('chatSub').innerHTML=`${dot}Siz: ${escapeHtml(myLang||'?')} → U: ${escapeHtml(friendProfile.language)} · ${onlineLabel(friend)}`; } }
 
 async function register(){
   try{
@@ -135,7 +141,7 @@ function connectSocket(){
   socket=new WebSocket(`${WS}/ws/${encodeURIComponent(me)}`);
   socket.onopen=()=>setStatus(`Online: ${me}`,'ok');
   socket.onclose=()=>setStatus(`Offline: ${me}. Qayta kiring.`,'err');
-  socket.onmessage=(event)=>{ const msg=JSON.parse(event.data); if(msg.type==='message'){ addMessage(msg); loadChats(); } if(msg.type==='error') alert(msg.detail); };
+  socket.onmessage=(event)=>{ const msg=JSON.parse(event.data); if(msg.type==='message'){ addMessage(msg); loadChats(); document.getElementById('typingLine').textContent=''; } if(msg.type==='typing'){ handleTypingEvent(msg); } if(msg.type==='presence'){ onlineMap.set(msg.nickname, !!msg.online); updateChatPresence(); loadChats(); } if(msg.type==='error') alert(msg.detail); };
 }
 function showTab(tab){ activeTab=tab; document.getElementById('tabChats').classList.toggle('active',tab==='chats'); document.getElementById('tabContacts').classList.toggle('active',tab==='contacts'); document.getElementById('chatsBox').style.display=tab==='chats'?'block':'none'; document.getElementById('contactsBox').style.display=tab==='contacts'?'block':'none'; }
 async function refreshLists(){ await Promise.all([loadChats(),loadContacts()]); }
@@ -151,7 +157,7 @@ async function searchUsers(){
     if(!filtered.length){ box.innerHTML="<div class='hint'>Foydalanuvchi topilmadi.</div>"; return; }
     box.innerHTML=filtered.map(u=>`
       <div class="list-item">
-        <div class="list-top"><div><div class="name">${escapeHtml(u.display_name)}</div><div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language)}</div></div></div>
+        <div class="list-top"><div><div class="name"><span class="online-dot ${onlineMap.get(u.nickname)?'on':''}"></span>${escapeHtml(u.display_name)}</div><div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language)}</div></div></div>
         <div class="result-actions">
           <button class="blue" onclick="startChat('${u.nickname}')">Chat</button>
           <button class="green" onclick="addContact('${u.nickname}')">Kontaktga qo‘shish</button>
@@ -170,7 +176,7 @@ async function loadContacts(){
   try{
     const list=await api(`/api/contacts/${encodeURIComponent(me)}`);
     if(!list.length){ box.innerHTML="<div class='hint'>Hozircha kontakt yo‘q.</div>"; return; }
-    box.innerHTML=list.map(u=>`<div class="list-item" onclick="startChat('${u.nickname}')"><div class="name">${escapeHtml(u.display_name)}</div><div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language)}</div></div>`).join('');
+    box.innerHTML=list.map(u=>`<div class="list-item" onclick="startChat('${u.nickname}')"><div class="name"><span class="online-dot ${onlineMap.get(u.nickname)?'on':''}"></span>${escapeHtml(u.display_name)}</div><div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language)}</div></div>`).join('');
   }catch(e){ box.innerHTML=`<div class='hint'>${escapeHtml(e.message)}</div>`; }
 }
 async function loadChats(){
@@ -182,7 +188,7 @@ async function loadChats(){
     box.innerHTML=list.map(c=>{
       const u=c.other||{}; const lm=c.last_message;
       const preview=lm ? (lm.sender===me ? lm.original_text : lm.translated_text) : 'Yangi chat';
-      return `<div class="list-item ${c.chat_id===chatId?'active':''}" onclick="startChat('${u.nickname}')"><div class="list-top"><div><div class="name">${escapeHtml(u.display_name||u.nickname)}</div><div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language||'')}</div></div></div><div class="last">${escapeHtml(preview)}</div></div>`;
+      return `<div class="list-item ${c.chat_id===chatId?'active':''}" onclick="startChat('${u.nickname}')"><div class="list-top"><div><div class="name"><span class="online-dot ${onlineMap.get(u.nickname)?'on':''}"></span>${escapeHtml(u.display_name||u.nickname)}</div><div class="nick">${escapeHtml(u.nickname)} · ${escapeHtml(u.language||'')}</div></div></div><div class="last">${escapeHtml(preview)}</div></div>`;
     }).join('');
   }catch(e){ box.innerHTML=`<div class='hint'>${escapeHtml(e.message)}</div>`; }
 }
@@ -195,7 +201,8 @@ async function startChat(nick){
     chatId=data.chat_id;
     friendProfile=data.user_a.nickname===me ? data.user_b : data.user_a;
     document.getElementById('chatTitle').textContent=`${friendProfile.display_name} ${friendProfile.nickname}`;
-    document.getElementById('chatSub').textContent=`Siz: ${myLang||'?'} → U: ${friendProfile.language}`;
+    updateChatPresence();
+    document.getElementById('typingLine').textContent='';
     document.getElementById('messages').innerHTML='';
     data.messages.forEach(addMessage);
     if(!data.messages.length) document.getElementById('messages').innerHTML='<div class="empty">Chat ochildi. Birinchi xabarni yozing.</div>';
@@ -208,8 +215,23 @@ function sendMessage(){
   if(!text) return; if(!socket||socket.readyState!==WebSocket.OPEN) return alert('WebSocket ulanmagan. Qayta kiring.'); if(!chatId||!friend) return alert('Avval chat oching.');
   const clientMessageId=`local_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   addMessage({type:'message',id:clientMessageId,client_message_id:clientMessageId,chat_id:chatId,sender:me,receiver:friend,original_text:text,translated_text:'Tarjima qilinmoqda...',source_lang:myLang||'?',target_lang:(friendProfile&&friendProfile.language)||'?',status:'translating',created_at:new Date().toISOString()});
-  socket.send(JSON.stringify({chat_id:chatId,sender:me,receiver:friend,text,client_message_id:clientMessageId}));
+  socket.send(JSON.stringify({type:'message',chat_id:chatId,sender:me,receiver:friend,text,client_message_id:clientMessageId}));
+  sendTyping(false);
   input.value=''; input.focus();
+}
+
+function sendTyping(isTyping){
+  if(!socket||socket.readyState!==WebSocket.OPEN||!chatId||!friend) return;
+  socket.send(JSON.stringify({type:'typing',chat_id:chatId,sender:me,receiver:friend,is_typing:isTyping}));
+}
+function handleTyping(){
+  sendTyping(true);
+  clearTimeout(typingTimer);
+  typingTimer=setTimeout(()=>sendTyping(false), 900);
+}
+function handleTypingEvent(msg){
+  if(!friend || msg.sender!==friend || msg.chat_id!==chatId) return;
+  document.getElementById('typingLine').textContent = msg.is_typing ? `${friendProfile?.display_name||msg.sender} yozmoqda...` : '';
 }
 function addMessage(msg){
   if(chatId&&msg.chat_id!==chatId) return;
@@ -218,8 +240,8 @@ function addMessage(msg){
   if(!wrap){ wrap=document.createElement('div'); wrap.className='msg-wrap '+(isMe?'me':''); if(key) wrap.dataset.messageKey=key; messages.appendChild(wrap); } else { wrap.className='msg-wrap '+(isMe?'me':''); }
   const translatedText=msg.translated_text||'Tarjima mavjud emas'; const shownText=isMe?msg.original_text:translatedText;
   const originalLine=isMe?`Tarjima: ${translatedText}`:`Original: ${msg.original_text}`;
-  const statusLabel=msg.status==='translating'?' · tarjima qilinmoqda':' · tarjima qilindi'; const bubbleClass=msg.status==='translating'?'bubble pending':'bubble';
-  wrap.innerHTML=`<div class="${bubbleClass}"><div class="text">${escapeHtml(shownText)}</div><div class="original ${msg.status==='translating'?'status-text':''}">${escapeHtml(originalLine)}</div><div class="meta">${escapeHtml(msg.sender)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}${escapeHtml(statusLabel)}</div></div>`;
+  const timeLabel=formatTime(msg.created_at); const statusLabel=msg.status==='translating'?' · ⏳ tarjima qilinmoqda':(isMe?' · ✓✓ tarjima qilindi':' · 🌐 tarjima'); const bubbleClass=msg.status==='translating'?'bubble pending':'bubble';
+  wrap.innerHTML=`<div class="${bubbleClass}"><div class="text">${escapeHtml(shownText)}</div><div class="original ${msg.status==='translating'?'status-text':''}">${escapeHtml(originalLine)}</div><div class="meta">${escapeHtml(timeLabel)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}${escapeHtml(statusLabel)}</div></div>`;
   messages.scrollTop=messages.scrollHeight;
 }
 
