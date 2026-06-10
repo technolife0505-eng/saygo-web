@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SayGo Web MVP v5.2</title>
+  <title>SayGo Web MVP v6</title>
   <style>
     :root {
       --bg: #f4f6fb; --card: #ffffff; --primary: #111827; --primary2: #2563eb;
@@ -57,6 +57,8 @@
     .voice-box { margin-top:8px; display:flex; align-items:center; gap:8px; padding:8px; background:rgba(255,255,255,.58); border:1px solid rgba(0,0,0,.08); border-radius:12px; }
     .voice-box audio { width:220px; max-width:100%; height:34px; }
     .voice-duration { font-size:12px; color:var(--muted); white-space:nowrap; }
+    .voice-label { font-size:12px; color:#374151; font-weight:900; min-width:74px; }
+    .voice-box.translated { background:#eef2ff; border-color:#bfdbfe; }
     .composer { padding:14px; display:flex; gap:10px; border-top:1px solid var(--line); background:#fff; }
     .composer input { flex:1; } .composer button { width:120px; margin-top:0; } .composer button.mic { width:52px; padding:12px 0; } .composer button.recording { background:#dc2626; animation:pulse 1s infinite; } @keyframes pulse{0%{opacity:1}50%{opacity:.7}100%{opacity:1}}
 
@@ -75,7 +77,7 @@
     <aside class="panel">
       <div class="side-header">
         <div class="brand"><div class="logo">S</div><div>SayGo</div></div>
-        <div class="hint">v5.2: voice replay, duration, audio saqlash, QR, chatlar va kontaktlar.</div>
+        <div class="hint">v6: voice-to-voice, tarjima ovozi, voice replay, QR, chatlar va kontaktlar.</div>
       </div>
 
       <div class="body">
@@ -410,7 +412,17 @@ function addMessage(msg){
   const originalLine=isMe?`Tarjima: ${translatedText}`:`Original: ${msg.original_text}`;
   const timeLabel=formatTime(msg.created_at); const statusLabel=msg.status==='translating'?' · ⏳ ishlanmoqda':(isMe?' · ✓✓ tayyor':' · 🌐 tarjima'); const bubbleClass=msg.status==='translating'?'bubble pending':'bubble';
   const audioUrl = absoluteAudioUrl(msg.audio_url);
-  const voiceHtml = isVoice && audioUrl ? `<div class="voice-box"><audio controls preload="metadata" src="${escapeHtml(audioUrl)}"></audio><span class="voice-duration">${escapeHtml(formatDuration(msg.duration_ms))}</span></div>` : '';
+  const translatedAudioUrl = absoluteAudioUrl(msg.translated_audio_url);
+  let voiceHtml = '';
+  if (isVoice && audioUrl) {
+    voiceHtml += `<div class="voice-box"><span class="voice-label">Original</span><audio controls preload="metadata" src="${escapeHtml(audioUrl)}"></audio><span class="voice-duration">${escapeHtml(formatDuration(msg.duration_ms))}</span></div>`;
+  }
+  if (isVoice && translatedAudioUrl) {
+    voiceHtml += `<div class="voice-box translated"><span class="voice-label">Tarjima</span><audio controls preload="metadata" src="${escapeHtml(translatedAudioUrl)}"></audio><span class="voice-duration">🔊</span></div>`;
+  }
+  if (isVoice && !translatedAudioUrl && msg.status === 'translated') {
+    voiceHtml += `<div class="voice-box translated"><span class="voice-label">Tarjima</span><span class="voice-duration">Ovoz hali yo‘q</span></div>`;
+  }
   wrap.innerHTML=`<div class="${bubbleClass}"><div class="text">${escapeHtml(shownText)}</div>${voiceHtml}<div class="original ${msg.status==='translating'?'status-text':''}">${escapeHtml(originalLine)}</div><div class="meta">${escapeHtml(timeLabel)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}${escapeHtml(statusLabel)}</div></div>`;
   messages.scrollTop=messages.scrollHeight;
 }
