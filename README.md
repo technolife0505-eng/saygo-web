@@ -1,8 +1,8 @@
-# SayGo Web MVP v3.1
+# SayGo Web MVP v4
 
 Tarjima chat MVP: FastAPI + WebSocket + OpenAI + PostgreSQL.
 
-## v3.1 yangiliklari
+## v4 yangiliklari
 
 - Chatlar ro'yxati va kontaktlar saqlanadi
 - Nickname orqali qidirish
@@ -12,6 +12,11 @@ Tarjima chat MVP: FastAPI + WebSocket + OpenAI + PostgreSQL.
 - Online / offline holati
 - “yozmoqda...” typing indicator
 - Xabar vaqti va tarjima statuslari
+
+- Profil bo‘limida “Mening QR”
+- QR ichida `saygo://user/@nickname`
+- QR skanerlash yoki QR matn orqali kontaktga qo‘shish
+- QR orqali kontaktga qo‘shilgach chat avtomatik ochiladi
 
 ## Render Web Service
 

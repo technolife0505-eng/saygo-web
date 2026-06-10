@@ -21,7 +21,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./saygo.db").strip() or "sql
 
 client: Optional[AsyncOpenAI] = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-app = FastAPI(title="SayGo Web MVP", version="0.3.1")
+app = FastAPI(title="SayGo Web MVP", version="0.4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,6 +81,10 @@ class StartChatPayload(BaseModel):
 class AddContactPayload(BaseModel):
     owner: str
     contact: str
+
+
+class QRResolvePayload(BaseModel):
+    code: str
 
 
 def now_iso() -> str:
@@ -302,6 +306,33 @@ async def search_user(q: str):
             LIMIT 20
         """), {"q": q + "%"}).fetchall()
     return [row_to_public_user(r) for r in rows]
+
+
+
+
+@app.post("/api/qr/resolve")
+async def resolve_qr(payload: QRResolvePayload):
+    raw = (payload.code or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="QR code is empty")
+
+    nickname = raw
+    prefixes = ["saygo://user/", "saygo://u/", "https://saygo.app/u/", "http://saygo.app/u/"]
+    for prefix in prefixes:
+        if nickname.lower().startswith(prefix):
+            nickname = nickname[len(prefix):]
+            break
+
+    if "?add=" in nickname:
+        nickname = nickname.split("?add=", 1)[1]
+    if "/u/" in nickname:
+        nickname = nickname.rsplit("/u/", 1)[1]
+
+    nickname = normalize_nickname(nickname)
+    user = public_user(nickname)
+    if not user:
+        raise HTTPException(status_code=404, detail="QR foydalanuvchisi topilmadi")
+    return {"ok": True, "user": user, "qr": f"saygo://user/{nickname}"}
 
 
 @app.post("/api/contacts/add")
