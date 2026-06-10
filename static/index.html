@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SayGo Web MVP</title>
+  <title>SayGo Web MVP v4</title>
   <style>
     :root {
       --bg: #f4f6fb; --card: #ffffff; --primary: #111827; --primary2: #2563eb;
@@ -56,6 +56,14 @@
     .status-text { color:#2563eb; font-weight:700; }
     .composer { padding:14px; display:flex; gap:10px; border-top:1px solid var(--line); background:#fff; }
     .composer input { flex:1; } .composer button { width:120px; margin-top:0; }
+
+    .qr-card { margin-top:10px; padding:12px; border:1px dashed var(--line); border-radius:14px; background:#f9fafb; text-align:center; }
+    .qr-card img { width:180px; height:180px; background:#fff; padding:8px; border-radius:14px; border:1px solid var(--line); }
+    .qr-code-text { margin-top:8px; font-size:12px; color:#374151; word-break:break-all; }
+    .qr-tools { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px; }
+    .qr-tools button { margin-top:0; font-size:13px; padding:10px; }
+    .scanner { display:none; margin-top:10px; padding:10px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+    video#qrVideo { width:100%; max-height:220px; border-radius:12px; background:#111827; }
     @media (max-width: 860px) { .layout { grid-template-columns:1fr; padding:10px; } .chat-panel { min-height:620px; } .bubble { max-width:86%; } }
   </style>
 </head>
@@ -64,7 +72,7 @@
     <aside class="panel">
       <div class="side-header">
         <div class="brand"><div class="logo">S</div><div>SayGo</div></div>
-        <div class="hint">v3.1: chatlar, kontaktlar, online/typing holati va xabar statuslari.</div>
+        <div class="hint">v4: chatlar, kontaktlar, online/typing va QR orqali qo‘shish.</div>
       </div>
 
       <div class="body">
@@ -76,6 +84,22 @@
         <select id="myLang"><option value="uz">O‘zbekcha</option><option value="ru">Русский</option><option value="en">English</option></select>
         <button class="blue" onclick="register()">Kirish / ro‘yxatdan o‘tish</button>
         <div id="loginStatus" class="status">Avval ro‘yxatdan o‘ting.</div>
+
+
+        <div class="section-title">QR orqali qo‘shish</div>
+        <div class="qr-tools">
+          <button class="secondary" onclick="showMyQr()">Mening QR</button>
+          <button class="secondary" onclick="toggleScanner()">QR skanerlash</button>
+        </div>
+        <div id="qrBox" class="qr-card" style="display:none"></div>
+        <div id="scannerBox" class="scanner">
+          <video id="qrVideo" muted playsinline></video>
+          <div class="hint">Kamera ochilmasa, QR ichidagi matnni pastga yozing: masalan <b>saygo://user/@asadulla</b></div>
+          <input id="qrManual" placeholder="saygo://user/@nickname yoki @nickname" />
+          <button class="green" onclick="resolveQrManual()">QR matn orqali qo‘shish</button>
+          <button class="secondary" onclick="stopScanner()">Skanerni yopish</button>
+          <div id="qrStatus" class="hint"></div>
+        </div>
 
         <div class="section-title">Nickname orqali qidirish</div>
         <div class="row">
@@ -112,7 +136,7 @@
 const API = window.location.origin;
 const WS = (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
 let socket = null, me = null, myLang = null, friend = null, friendProfile = null, chatId = null, activeTab = 'chats';
-let typingTimer = null;
+let typingTimer = null, qrStream = null, qrScanTimer = null;
 const onlineMap = new Map();
 
 function normalizeNick(nick){ nick=(nick||'').trim().toLowerCase().replaceAll(' ',''); if(!nick.startsWith('@')) nick='@'+nick; return nick; }
@@ -145,6 +169,62 @@ function connectSocket(){
 }
 function showTab(tab){ activeTab=tab; document.getElementById('tabChats').classList.toggle('active',tab==='chats'); document.getElementById('tabContacts').classList.toggle('active',tab==='contacts'); document.getElementById('chatsBox').style.display=tab==='chats'?'block':'none'; document.getElementById('contactsBox').style.display=tab==='contacts'?'block':'none'; }
 async function refreshLists(){ await Promise.all([loadChats(),loadContacts()]); }
+
+function buildQrPayload(){ return `saygo://user/${me}`; }
+function qrImageUrl(payload){ return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(payload)}`; }
+function showMyQr(){
+  const box=document.getElementById('qrBox');
+  if(!me){ box.style.display='block'; box.innerHTML='<div class="hint">Avval ro‘yxatdan o‘ting.</div>'; return; }
+  const payload=buildQrPayload();
+  box.style.display='block';
+  box.innerHTML=`<div class="name">Mening SayGo QR</div><div class="nick">${escapeHtml(me)}</div><img src="${qrImageUrl(payload)}" alt="SayGo QR" /><div class="qr-code-text">${escapeHtml(payload)}</div><button class="secondary" onclick="copyQrPayload()">QR matnini nusxalash</button>`;
+}
+async function copyQrPayload(){
+  try{ await navigator.clipboard.writeText(buildQrPayload()); alert('QR matni nusxalandi'); }catch(_){ alert(buildQrPayload()); }
+}
+async function resolveQrCode(raw){
+  const status=document.getElementById('qrStatus');
+  if(!me){ status.textContent='Avval ro‘yxatdan o‘ting.'; return; }
+  try{
+    const data=await api('/api/qr/resolve',{method:'POST',body:JSON.stringify({code:raw})});
+    const u=data.user;
+    if(u.nickname===me){ status.textContent='Bu o‘zingizning QR kodingiz.'; return; }
+    await api('/api/contacts/add',{method:'POST',body:JSON.stringify({owner:me,contact:u.nickname})});
+    await loadContacts();
+    await startChat(u.nickname);
+    stopScanner();
+    status.textContent=`${u.display_name} kontaktga qo‘shildi va chat ochildi.`;
+  }catch(e){ status.textContent=e.message; }
+}
+function resolveQrManual(){ const raw=document.getElementById('qrManual').value.trim(); if(raw) resolveQrCode(raw); }
+async function toggleScanner(){
+  const box=document.getElementById('scannerBox');
+  if(box.style.display==='block'){ stopScanner(); return; }
+  box.style.display='block';
+  document.getElementById('qrStatus').textContent='Kamera ishga tushirilmoqda...';
+  if(!('BarcodeDetector' in window)){
+    document.getElementById('qrStatus').textContent='Bu brauzer QR skanerni qo‘llamasligi mumkin. QR matnni qo‘lda kiriting.';
+    return;
+  }
+  try{
+    qrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    const video=document.getElementById('qrVideo');
+    video.srcObject=qrStream; await video.play();
+    const detector=new BarcodeDetector({formats:['qr_code']});
+    document.getElementById('qrStatus').textContent='QR kodni kameraga tuting.';
+    qrScanTimer=setInterval(async()=>{
+      try{
+        const codes=await detector.detect(video);
+        if(codes&&codes.length){ const value=codes[0].rawValue; clearInterval(qrScanTimer); qrScanTimer=null; await resolveQrCode(value); }
+      }catch(_){ }
+    },700);
+  }catch(e){ document.getElementById('qrStatus').textContent='Kamera ochilmadi. QR matnni qo‘lda kiriting.'; }
+}
+function stopScanner(){
+  document.getElementById('scannerBox').style.display='none';
+  if(qrScanTimer){ clearInterval(qrScanTimer); qrScanTimer=null; }
+  if(qrStream){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; }
+}
 
 async function searchUsers(){
   const box=document.getElementById('searchResults');
@@ -249,6 +329,8 @@ window.addEventListener('load',async()=>{
   const saved=localStorage.getItem('saygo_me');
   if(saved){ const user=JSON.parse(saved); document.getElementById('myNick').value=user.nickname; document.getElementById('displayName').value=user.display_name; document.getElementById('myLang').value=user.language; }
   try{ const health=await api('/api/health'); if(!health.openai_key_configured) setStatus('OPENAI_API_KEY yo‘q. Tarjima demo rejimida ishlaydi.','err'); }catch(_){ }
+  const addNick=new URLSearchParams(window.location.search).get('add');
+  if(addNick){ document.getElementById('searchNick').value=addNick; document.getElementById('qrManual').value=`saygo://user/${addNick}`; }
 });
 </script>
 </body>
