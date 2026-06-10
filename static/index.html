@@ -72,7 +72,7 @@
     <aside class="panel">
       <div class="side-header">
         <div class="brand"><div class="logo">S</div><div>SayGo</div></div>
-        <div class="hint">v4: chatlar, kontaktlar, online/typing va QR orqali qo‘shish.</div>
+        <div class="hint">v4.1: QR kamera linki, chatlar, kontaktlar, online/typing.</div>
       </div>
 
       <div class="body">
@@ -94,8 +94,8 @@
         <div id="qrBox" class="qr-card" style="display:none"></div>
         <div id="scannerBox" class="scanner">
           <video id="qrVideo" muted playsinline></video>
-          <div class="hint">Kamera ochilmasa, QR ichidagi matnni pastga yozing: masalan <b>saygo://user/@asadulla</b></div>
-          <input id="qrManual" placeholder="saygo://user/@nickname yoki @nickname" />
+          <div class="hint">Kamera ochilmasa, QR ichidagi link yoki matnni pastga yozing: <b>https://.../u/@asadulla</b> yoki <b>saygo://user/@asadulla</b></div>
+          <input id="qrManual" placeholder="https://saygo-web.onrender.com/u/@nickname yoki saygo://user/@nickname" />
           <button class="green" onclick="resolveQrManual()">QR matn orqali qo‘shish</button>
           <button class="secondary" onclick="stopScanner()">Skanerni yopish</button>
           <div id="qrStatus" class="hint"></div>
@@ -170,14 +170,20 @@ function connectSocket(){
 function showTab(tab){ activeTab=tab; document.getElementById('tabChats').classList.toggle('active',tab==='chats'); document.getElementById('tabContacts').classList.toggle('active',tab==='contacts'); document.getElementById('chatsBox').style.display=tab==='chats'?'block':'none'; document.getElementById('contactsBox').style.display=tab==='contacts'?'block':'none'; }
 async function refreshLists(){ await Promise.all([loadChats(),loadContacts()]); }
 
-function buildQrPayload(){ return `saygo://user/${me}`; }
+function buildQrPayload(){
+  // v4.1: QR ichida HTTPS link bo‘ladi. Telefon kamerasi buni darhol link sifatida ko‘radi.
+  // Masalan: https://saygo-web.onrender.com/u/@asadulla
+  const base = window.location.origin;
+  return `${base}/u/${encodeURIComponent(me)}`;
+}
+function buildQrFallbackPayload(){ return `saygo://user/${me}`; }
 function qrImageUrl(payload){ return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(payload)}`; }
 function showMyQr(){
   const box=document.getElementById('qrBox');
   if(!me){ box.style.display='block'; box.innerHTML='<div class="hint">Avval ro‘yxatdan o‘ting.</div>'; return; }
   const payload=buildQrPayload();
   box.style.display='block';
-  box.innerHTML=`<div class="name">Mening SayGo QR</div><div class="nick">${escapeHtml(me)}</div><img src="${qrImageUrl(payload)}" alt="SayGo QR" /><div class="qr-code-text">${escapeHtml(payload)}</div><button class="secondary" onclick="copyQrPayload()">QR matnini nusxalash</button>`;
+  box.innerHTML=`<div class="name">Mening SayGo QR</div><div class="nick">${escapeHtml(me)}</div><img src="${qrImageUrl(payload)}" alt="SayGo QR" /><div class="qr-code-text"><b>Kamera linki:</b><br>${escapeHtml(payload)}</div><div class="qr-code-text"><b>Ichki kod:</b><br>${escapeHtml(buildQrFallbackPayload())}</div><button class="secondary" onclick="copyQrPayload()">QR linkini nusxalash</button>`;
 }
 async function copyQrPayload(){
   try{ await navigator.clipboard.writeText(buildQrPayload()); alert('QR matni nusxalandi'); }catch(_){ alert(buildQrPayload()); }
@@ -325,12 +331,34 @@ function addMessage(msg){
   messages.scrollTop=messages.scrollHeight;
 }
 
+function getPendingQrNickFromUrl(){
+  const params = new URLSearchParams(window.location.search);
+  let nick = params.get('add');
+  if(!nick && window.location.pathname.startsWith('/u/')){
+    nick = decodeURIComponent(window.location.pathname.slice(3));
+  }
+  return nick ? normalizeNick(nick) : '';
+}
+
+async function handlePendingQrLink(){
+  const nick = getPendingQrNickFromUrl();
+  if(!nick) return;
+  document.getElementById('searchNick').value = nick;
+  document.getElementById('qrManual').value = `${window.location.origin}/u/${encodeURIComponent(nick)}`;
+  const status=document.getElementById('qrStatus');
+  status.textContent = `QR link topildi: ${nick}`;
+  if(me){
+    await resolveQrCode(`${window.location.origin}/u/${encodeURIComponent(nick)}`);
+  }else{
+    status.textContent = `QR link topildi: ${nick}. Avval o‘z nickname'ingiz bilan kiring, keyin kontakt avtomatik qo‘shiladi.`;
+  }
+}
+
 window.addEventListener('load',async()=>{
   const saved=localStorage.getItem('saygo_me');
   if(saved){ const user=JSON.parse(saved); document.getElementById('myNick').value=user.nickname; document.getElementById('displayName').value=user.display_name; document.getElementById('myLang').value=user.language; }
   try{ const health=await api('/api/health'); if(!health.openai_key_configured) setStatus('OPENAI_API_KEY yo‘q. Tarjima demo rejimida ishlaydi.','err'); }catch(_){ }
-  const addNick=new URLSearchParams(window.location.search).get('add');
-  if(addNick){ document.getElementById('searchNick').value=addNick; document.getElementById('qrManual').value=`saygo://user/${addNick}`; }
+  await handlePendingQrLink();
 });
 </script>
 </body>
