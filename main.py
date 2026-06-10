@@ -21,7 +21,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./saygo.db").strip() or "sql
 
 client: Optional[AsyncOpenAI] = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-app = FastAPI(title="SayGo Web MVP", version="0.4.0")
+app = FastAPI(title="SayGo Web MVP", version="0.4.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -242,6 +242,13 @@ async def translate_text(text_value: str, source_lang: str, target_lang: str) ->
     return response.output_text.strip()
 
 
+@app.get("/u/{nickname:path}")
+async def user_deep_link(nickname: str):
+    # Camera QR scanners open this HTTPS link. Frontend reads /u/@nickname
+    # and adds/opens the contact after the user is registered in this browser.
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
 @app.get("/")
 async def index():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
@@ -252,7 +259,7 @@ async def health():
     return {
         "status": "ok",
         "app": "SayGo Web MVP",
-        "version": "0.3.1-chat-polish",
+        "version": "0.4.1-qr-camera-link",
         "database_configured": bool(os.getenv("DATABASE_URL", "").strip()),
         "database_dialect": engine.dialect.name,
         "openai_key_configured": bool(OPENAI_API_KEY),

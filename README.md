@@ -1,4 +1,4 @@
-# SayGo Web MVP v4
+# SayGo Web MVP v4.1
 
 Tarjima chat MVP: FastAPI + WebSocket + OpenAI + PostgreSQL.
 
@@ -41,3 +41,11 @@ DATABASE_URL=postgresql://...
 ```
 
 Agar `DATABASE_URL` qo'yilmasa, lokal test uchun `sqlite:///./saygo.db` ishlaydi.
+
+
+## v4.1 yangiliklari
+
+- QR kod ichida endi HTTPS link bo‘ladi: `https://YOUR_DOMAIN/u/@nickname`.
+- Telefon kamerasi QR’ni ko‘rganda darhol link beradi.
+- Link ochilsa, SayGo sahifasi kontaktni avtomatik tanib, foydalanuvchi kirgan bo‘lsa kontaktga qo‘shadi va chat ochadi.
+- Eski `saygo://user/@nickname` formatini ham qo‘lda yoki ichki skaner orqali taniydi.
