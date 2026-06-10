@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SayGo Web MVP v5</title>
+  <title>SayGo Web MVP v5.2</title>
   <style>
     :root {
       --bg: #f4f6fb; --card: #ffffff; --primary: #111827; --primary2: #2563eb;
@@ -54,6 +54,9 @@
     .bubble .meta { font-size:11px; color:var(--muted); margin-top:7px; }
     .original { margin-top:7px; color:#4b5563; font-size:12px; border-top:1px solid rgba(0,0,0,.08); padding-top:7px; }
     .status-text { color:#2563eb; font-weight:700; }
+    .voice-box { margin-top:8px; display:flex; align-items:center; gap:8px; padding:8px; background:rgba(255,255,255,.58); border:1px solid rgba(0,0,0,.08); border-radius:12px; }
+    .voice-box audio { width:220px; max-width:100%; height:34px; }
+    .voice-duration { font-size:12px; color:var(--muted); white-space:nowrap; }
     .composer { padding:14px; display:flex; gap:10px; border-top:1px solid var(--line); background:#fff; }
     .composer input { flex:1; } .composer button { width:120px; margin-top:0; } .composer button.mic { width:52px; padding:12px 0; } .composer button.recording { background:#dc2626; animation:pulse 1s infinite; } @keyframes pulse{0%{opacity:1}50%{opacity:.7}100%{opacity:1}}
 
@@ -72,7 +75,7 @@
     <aside class="panel">
       <div class="side-header">
         <div class="brand"><div class="logo">S</div><div>SayGo</div></div>
-        <div class="hint">v5.1: QR, chatlar, kontaktlar, online/typing va voice message fix.</div>
+        <div class="hint">v5.2: voice replay, duration, audio saqlash, QR, chatlar va kontaktlar.</div>
       </div>
 
       <div class="body">
@@ -138,7 +141,7 @@ const API = window.location.origin;
 const WS = (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
 let socket = null, me = null, myLang = null, friend = null, friendProfile = null, chatId = null, activeTab = 'chats';
 let typingTimer = null, qrStream = null, qrScanTimer = null;
-let mediaRecorder = null, recordedChunks = [], isRecording = false;
+let mediaRecorder = null, recordedChunks = [], isRecording = false, recordingStartedAt = 0;
 const onlineMap = new Map();
 
 function normalizeNick(nick){ nick=(nick||'').trim().toLowerCase().replaceAll(' ',''); if(!nick.startsWith('@')) nick='@'+nick; return nick; }
@@ -347,13 +350,16 @@ function stopRecording(){
 async function sendVoiceBlob(blob){
   if(!blob || blob.size < 1000){ alert('Audio juda qisqa yoki bo\'sh. Qayta yozing.'); return; }
   const clientMessageId=`voice_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  addMessage({type:'message',message_kind:'voice',id:clientMessageId,client_message_id:clientMessageId,chat_id:chatId,sender:me,receiver:friend,original_text:'🎙️ Voice message yuborildi',translated_text:'Ovoz matnga aylantirilmoqda...',source_lang:myLang||'?',target_lang:(friendProfile&&friendProfile.language)||'?',status:'translating',created_at:new Date().toISOString()});
+  const localAudioUrl = URL.createObjectURL(blob);
+  const durationMs = Date.now() - recordingStartedAt;
+  addMessage({type:'message',message_kind:'voice',id:clientMessageId,client_message_id:clientMessageId,chat_id:chatId,sender:me,receiver:friend,original_text:'🎙️ Voice message yuborildi',translated_text:'Ovoz matnga aylantirilmoqda...',source_lang:myLang||'?',target_lang:(friendProfile&&friendProfile.language)||'?',status:'translating',created_at:new Date().toISOString(),audio_url:localAudioUrl,duration_ms:durationMs});
   const fd = new FormData();
   fd.append('audio', blob, 'voice.webm');
   fd.append('chat_id', chatId);
   fd.append('sender', me);
   fd.append('receiver', friend);
   fd.append('client_message_id', clientMessageId);
+  fd.append('duration_ms', String(durationMs));
   try{
     const res = await fetch(API + '/api/voice-message', {method:'POST', body: fd});
     if(!res.ok){ const err=await res.json().catch(()=>({detail:res.statusText})); throw new Error(err.detail||'Voice xatolik'); }
@@ -379,17 +385,33 @@ function handleTypingEvent(msg){
   if(!friend || msg.sender!==friend || msg.chat_id!==chatId) return;
   document.getElementById('typingLine').textContent = msg.is_typing ? `${friendProfile?.display_name||msg.sender} yozmoqda...` : '';
 }
+function formatDuration(ms){
+  if(!ms) return '';
+  const total = Math.max(1, Math.round(ms/1000));
+  const m = Math.floor(total/60);
+  const s = String(total%60).padStart(2,'0');
+  return m ? `${m}:${s}` : `0:${s}`;
+}
+function absoluteAudioUrl(url){
+  if(!url) return '';
+  if(url.startsWith('blob:') || url.startsWith('http')) return url;
+  return API + url;
+}
+
 function addMessage(msg){
   if(chatId&&msg.chat_id!==chatId) return;
   const messages=document.getElementById('messages'); const empty=messages.querySelector('.empty'); if(empty) empty.remove();
   const isMe=msg.sender===me; const key=msg.client_message_id||msg.id; let wrap=key?messages.querySelector(`[data-message-key="${cssEscape(key)}"]`):null;
   if(!wrap){ wrap=document.createElement('div'); wrap.className='msg-wrap '+(isMe?'me':''); if(key) wrap.dataset.messageKey=key; messages.appendChild(wrap); } else { wrap.className='msg-wrap '+(isMe?'me':''); }
   const translatedText=msg.translated_text||'Tarjima mavjud emas';
-  const kindLabel = msg.message_kind === 'voice' ? '🎙️ ' : '';
+  const isVoice = msg.message_kind === 'voice';
+  const kindLabel = isVoice ? '🎙️ ' : '';
   const shownText=kindLabel + (isMe?msg.original_text:translatedText);
   const originalLine=isMe?`Tarjima: ${translatedText}`:`Original: ${msg.original_text}`;
   const timeLabel=formatTime(msg.created_at); const statusLabel=msg.status==='translating'?' · ⏳ ishlanmoqda':(isMe?' · ✓✓ tayyor':' · 🌐 tarjima'); const bubbleClass=msg.status==='translating'?'bubble pending':'bubble';
-  wrap.innerHTML=`<div class="${bubbleClass}"><div class="text">${escapeHtml(shownText)}</div><div class="original ${msg.status==='translating'?'status-text':''}">${escapeHtml(originalLine)}</div><div class="meta">${escapeHtml(timeLabel)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}${escapeHtml(statusLabel)}</div></div>`;
+  const audioUrl = absoluteAudioUrl(msg.audio_url);
+  const voiceHtml = isVoice && audioUrl ? `<div class="voice-box"><audio controls preload="metadata" src="${escapeHtml(audioUrl)}"></audio><span class="voice-duration">${escapeHtml(formatDuration(msg.duration_ms))}</span></div>` : '';
+  wrap.innerHTML=`<div class="${bubbleClass}"><div class="text">${escapeHtml(shownText)}</div>${voiceHtml}<div class="original ${msg.status==='translating'?'status-text':''}">${escapeHtml(originalLine)}</div><div class="meta">${escapeHtml(timeLabel)} · ${escapeHtml(msg.source_lang)} → ${escapeHtml(msg.target_lang)}${escapeHtml(statusLabel)}</div></div>`;
   messages.scrollTop=messages.scrollHeight;
 }
 
