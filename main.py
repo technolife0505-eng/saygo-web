@@ -1,5 +1,6 @@
 import json
 import os
+from io import BytesIO
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -243,16 +244,32 @@ async def translate_text(text_value: str, source_lang: str, target_lang: str) ->
 
 
 async def transcribe_audio_bytes(audio_bytes: bytes, filename: str, content_type: str) -> str:
-    if not audio_bytes:
-        raise HTTPException(status_code=400, detail="Audio fayl bo'sh")
+    if not audio_bytes or len(audio_bytes) < 1000:
+        raise HTTPException(status_code=400, detail="Audio juda qisqa yoki bo'sh. Kamida 1 soniya yozib ko'ring.")
     if client is None:
         raise HTTPException(status_code=400, detail="OPENAI_API_KEY sozlanmagan")
 
+    # Browser MediaRecorder odatda webm/opus yuboradi. OpenAI SDK uchun eng barqaror usul:
+    # BytesIO obyektiga .name berib, uni file sifatida yuborish.
+    safe_name = (filename or "voice.webm").lower()
+    if not safe_name.endswith((".webm", ".wav", ".mp3", ".m4a", ".mp4", ".mpeg", ".mpga")):
+        safe_name = "voice.webm"
+    if safe_name.endswith(".ogg"):
+        safe_name = "voice.webm"
+
+    audio_file = BytesIO(audio_bytes)
+    audio_file.name = safe_name
+
     transcribe_model = os.getenv("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe").strip() or "gpt-4o-mini-transcribe"
-    result = await client.audio.transcriptions.create(
-        model=transcribe_model,
-        file=(filename or "voice.webm", audio_bytes, content_type or "audio/webm"),
-    )
+    try:
+        result = await client.audio.transcriptions.create(
+            model=transcribe_model,
+            file=audio_file,
+        )
+    except Exception as exc:
+        print(f"Transcription error: filename={safe_name}, content_type={content_type}, bytes={len(audio_bytes)}, error={exc!r}")
+        raise HTTPException(status_code=400, detail="Ovoz faylini o'qib bo'lmadi. Qayta yozib ko'ring.")
+
     text_value = getattr(result, "text", "") or ""
     return text_value.strip()
 

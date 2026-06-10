@@ -1,6 +1,6 @@
-# SayGo Web MVP v5
+# SayGo Web MVP v5.1
 
-v5 funksiyalar:
+v5.1 funksiyalar:
 - Tarjima chat
 - PostgreSQL saqlash
 - Kontaktlar va chatlar ro'yxati
@@ -18,4 +18,4 @@ Environment:
 - `OPENAI_MODEL=gpt-5-nano`
 - `OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe`
 
-Eslatma: v5 voice message hozir audio faylni saqlamaydi. Ovoz matnga aylantiriladi va tarjima qilingan xabar sifatida chatga qo'shiladi. v5.1 da tarjima qilingan audio javob qo'shiladi.
+Eslatma: v5.1 voice message hozir audio faylni saqlamaydi. Ovoz matnga aylantiriladi va tarjima qilingan xabar sifatida chatga qo'shiladi. v5.1.1 da tarjima qilingan audio javob qo'shiladi.
